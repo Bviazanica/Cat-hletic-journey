@@ -2,6 +2,7 @@ import pygame
 import math
 import sys
 import os
+import csv
 from pygame.locals import *
 from enum import IntEnum
 Vector2 = pygame.math.Vector2
@@ -17,6 +18,11 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
 # define game variables
 GRAVITY = 0.75
+level = 1
+ROWS = 15
+COLS = 50
+TILE_SIZE = SCREEN_HEIGHT // ROWS
+TILE_TYPES = 264
 
 # define player action variables
 moving_left = False
@@ -25,9 +31,15 @@ moving_right = False
 # scale
 scale = 1
 
+# store tiles in a list
+img_list = []
+for x in range(TILE_SIZE):
+    img = pygame.image.load(f'platformer/data/images/Tiles/{x}.png')
+    img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+    img_list.append(img)
+
+
 # load all images & animations
-
-
 def load_entity_animations():
     animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Roll', 'Use', 'Walk']
     entity_types = ['Player']
@@ -78,8 +90,31 @@ class World():
     def __init__(self):
         self.obstacles_list = []
 
-    def convert_map(self, world_data):
-        pass
+    def process_data(self, data):
+        # iterate through each value in level data file
+        for y, row in enumerate(data):
+            for x, tile in enumerate(row):
+                if tile >= 0:
+                    print(img_list)
+                    img = img_list[tile]
+                    img_rect = img.get_rect()
+                    img_rect.x = x * TILE_SIZE
+                    img_rect.y = y * TILE_SIZE
+                    tile_data = (img, img_rect)
+                    if tile >= 0 and tile <= 8:
+                        self.obstacle_list.append(tile_data)
+                    elif tile >= 9 and tile <= 10:
+                        water = Water(img, x * TILE_SIZE, y * TILE_SIZE)
+                        water_group.add(water)
+                    elif tile >= 11 and tile <= 14:
+                        decoration = Decoration(
+                            img, x * TILE_SIZE, y * TILE_SIZE)
+                        decoration_group.add(decoration)
+                    elif tile == 15:  # create player
+                        player = Player('player', x * TILE_SIZE,
+                                        y * TILE_SIZE, 2)
+
+        return player
 
 
 class Player(pygame.sprite.Sprite):
@@ -164,9 +199,55 @@ class Player(pygame.sprite.Sprite):
             self.update_time = self.local_time
 
 
-player = Player('player', 200, 200, 2)
+class Decoration(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+
+class Water(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+
+class Exit(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+
 running = True
 current_time = 0
+# create empty tile list
+world_data = []
+for row in range(ROWS):
+    r = [-1] * COLS
+    world_data.append(r)
+# load in level data and create world
+with open(f'platformer/data/maps/level{level}.csv', newline='') as csvfile:
+    reader = csv.reader(csvfile, delimiter=',')
+    for x, row in enumerate(reader):
+        for y, tile in enumerate(row):
+            world_data[x][y] = int(tile)
+world = World()
+
+player = world.process_data(world_data)
+
+
+# create sprite groups
+decoration_group = pygame.sprite.Group()
+water_group = pygame.sprite.Group()
+exit_group = pygame.sprite.Group()
 
 # Game loop.
 while running:

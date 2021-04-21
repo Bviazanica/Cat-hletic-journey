@@ -5,6 +5,7 @@ import os
 import csv
 from pygame.locals import *
 from enum import IntEnum
+from data.camera.camera import *
 Vector2 = pygame.math.Vector2
 
 pygame.init()
@@ -15,7 +16,8 @@ Clock = pygame.time.Clock()
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = int(SCREEN_WIDTH * 0.8)
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-SCROLL_THRESH = 200
+canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+
 # define game variables
 GRAVITY = 0.75
 ROWS = 15
@@ -30,9 +32,6 @@ level = 1
 moving_left = False
 moving_right = False
 
-# background & screen scrolling
-screen_scroll = 0
-background_scroll = 0
 
 # scale
 scale = 1
@@ -76,26 +75,26 @@ clouds4_background_image = pygame.transform.scale(
     clouds4_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
 
-def draw_background():
-    screen.blit(sky_background_image, (0, 0))
+def draw_background(canvas, offset_x, offset_y):
+    canvas.blit(sky_background_image, (0, 0))
+
     width = sky_background_image.get_width()
-    for x in range(5):
-        screen.blit(rocks_background_image,
-                    (int((x * width) - background_scroll * 0.1), 0))
-        screen.blit(mountain_background_image,
-                    (int((x * width) - background_scroll * 0.3), 0))
-        screen.blit(clouds1_background_image,
-                    (int((x * width) - background_scroll * 0.4), 0))
-        screen.blit(clouds2_background_image,
-                    (int((x * width) - background_scroll * 0.4), 0))
-        screen.blit(clouds3_background_image,
-                    (int((x * width) - background_scroll * 0.5), 0))
-        screen.blit(clouds4_background_image,
-                    (int((x * width) - background_scroll * 0.6), 0))
+    for x in range(2):
+        canvas.blit(rocks_background_image,
+                    (round(x*width - offset_x*0.1), round(0-offset_y*0.3)))
+        canvas.blit(mountain_background_image,
+                    (round(x*width - offset_x*0.15), round(0-offset_y*0.3)))
+        canvas.blit(clouds1_background_image,
+                    (round(x*width - offset_x*0.2), round(0-offset_y*0.3)))
+        canvas.blit(clouds2_background_image,
+                    (round(x*width - offset_x*0.3), round(0-offset_y*0.3)))
+        canvas.blit(clouds3_background_image,
+                    (round(x*width - offset_x*0.25), round(0-offset_y*0.3)))
+        canvas.blit(clouds4_background_image,
+                    (round(x*width - offset_x*0.3), round(0-offset_y*0.3)))
+
 
 # load all images & animations
-
-
 def load_entity_animations():
     animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Roll', 'Use', 'Walk']
     entity_types = ['Player', 'Enemy']
@@ -167,21 +166,31 @@ class World():
                         water = Water(img, x * TILE_SIZE, y * TILE_SIZE)
                         water_group.add(water)
                     elif tile == 238:  # create player
+                        print(f'{x, TILE_SIZE}')
                         player = Player(x * TILE_SIZE,
                                         y * TILE_SIZE, 5)
+                        camera = Camera(player)
+                        border = Border(
+                            camera, player, world.get_world_length())
+                        camera.setmethod(border)
                     elif tile == 239:  # create player
                         new_enemy = Enemy(x * TILE_SIZE,
                                           y * TILE_SIZE, 5)
                         enemies_group.add(new_enemy)
 
-        return player
+        return player, camera
 
-    def draw(self):
+    def draw(self, canvas, offset_x, offset_y):
         for tile in self.obstacles_list:
-            tile[1][0] += screen_scroll
-            screen.blit(tile[0], tile[1])
-            pygame.draw.rect(screen, (255, 0, 0),
-                             (tile[1].x, tile[1].y, tile[1].width, tile[1].height), 2)
+            canvas.blit(tile[0], (int(tile[1].x - offset_x),
+                                  int(tile[1].y - offset_y), tile[1].width, tile[1].height))
+            pygame.draw.rect(canvas, (255, 0, 0),
+                             (int(tile[1].x - offset_x), int(tile[1].y - offset_y), tile[1].width, tile[1].height), 2)
+            # pygame.draw.rect(canvas, (255, 255, 12),
+            #                  (tile[1].x, tile[1].y, tile[1].width, tile[1].height), 2)
+
+    def get_world_length(self):
+        return self.level_length * TILE_SIZE
 
 
 class Player(pygame.sprite.Sprite):
@@ -206,7 +215,7 @@ class Player(pygame.sprite.Sprite):
 
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
-        self.rect.center = (x, y)
+        self.rect.topleft = (x, y)
         self.width = self.image.get_width()
         self.height = self.image.get_height()
 
@@ -214,7 +223,7 @@ class Player(pygame.sprite.Sprite):
         self.local_time = current_time
         self.update_animation()
         # reset movement variables
-        screen_scroll = 0
+
         dx = 0
         dy = 0
 
@@ -244,7 +253,6 @@ class Player(pygame.sprite.Sprite):
             # check collision in the x direction
             if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                 dx = 0
-
             # check for collision in the y direction
             if tile[1].colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
                 # check if below the ground, i.e. jumping
@@ -257,23 +265,24 @@ class Player(pygame.sprite.Sprite):
                     self.in_air = False
                     dy = tile[1].top - self.rect.bottom
 
-        if self.rect.left + dx < 0 or self.rect.right + dx > SCREEN_WIDTH:
+        if self.rect.left + dx < 0 or self.rect.right + dx > (world.level_length * TILE_SIZE):
             dx = 0
+        if self.rect.y + dy < 0 and self.vel_y < 0:
+            self.vel_y = 0
 
         # update rectangle position
         self.rect.x += dx
         self.rect.y += dy
 
-        # update scroll based on player position
-        if (self.rect.right > SCREEN_WIDTH - SCROLL_THRESH and background_scroll < (world.level_length * TILE_SIZE) - SCREEN_WIDTH) or (self.rect.left < SCROLL_THRESH and background_scroll > abs(dx)):
-            self.rect.x -= dx
-            screen_scroll = -dx
+        # # update scroll based on player position
+        # if (self.rect.right > SCREEN_WIDTH - SCROLL_THRESH and background_scroll < (world.level_length * TILE_SIZE) - SCREEN_WIDTH) or (self.rect.left < SCROLL_THRESH and background_scroll > abs(dx)):
+        #     self.rect.x -= dx
+        #     screen_scroll = -dx
 
-        return screen_scroll
-
-    def draw(self):
-        screen.blit(pygame.transform.flip(
-            self.image, self.flip, False), self.rect)
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
+                                                                              offset_x), int(self.rect.y -
+                                                                                             offset_y)))
 
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
@@ -313,7 +322,7 @@ class Enemy(pygame.sprite.Sprite):
 
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
-        self.rect.center = (x, y)
+        self.rect.topleft = (x, y)
         self.width = self.image.get_width()
         self.height = self.image.get_height()
 
@@ -321,8 +330,10 @@ class Enemy(pygame.sprite.Sprite):
         self.local_time = current_time
         self.update_animation()
 
-        dx = 1
+        dx = 0
         dy = 0
+
+        dx = 1 if self.direction == 1 else -1
 
         # apply gravity
         self.vel_y += GRAVITY
@@ -335,6 +346,7 @@ class Enemy(pygame.sprite.Sprite):
             # check collision in the x direction
             if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                 dx *= -1
+
             # check for collision in the y direction
             if tile[1].colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
                 # check if above the ground, i.e. falling
@@ -343,16 +355,18 @@ class Enemy(pygame.sprite.Sprite):
                     self.in_air = False
                     dy = tile[1].top - self.rect.bottom
 
-        if self.rect.left + dx < 0 or self.rect.right + dx > SCREEN_WIDTH:
+        if self.rect.left + dx < 0:
             dx = 0
 
         # update rectangle position
         self.rect.x += dx
         self.rect.y += dy
 
-    def draw(self):
-        screen.blit(pygame.transform.flip(
-            self.image, self.flip, False), self.rect)
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (int(self.rect.x -
+                                     offset_x), int(self.rect.y - offset_y)))
+        pygame.draw.rect(canvas, (255, 0, 0),
+                         (int(self.rect.x - offset_x), int(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
@@ -378,8 +392,9 @@ class Decoration(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def update(self):
-        self.rect.x += screen_scroll
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (int(self.rect.x -
+                                     offset_x), int(self.rect.y - offset_y)))
 
 
 class Water(pygame.sprite.Sprite):
@@ -390,8 +405,9 @@ class Water(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def update(self):
-        self.rect.x += screen_scroll
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (int(self.rect.x - offset_x),
+                                 int(self.rect.y-offset_y)))
 
 
 class Collectible(pygame.sprite.Sprite):
@@ -403,15 +419,9 @@ class Collectible(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def update(self):
-        # scroll
-        self.rect.x += screen_scroll
-        # check if the player has picked up the box
-        if pygame.sprite.collide_rect(self, player):
-            if self.type == 'Key':
-                player.keys += 1
-                # delete the item box
-                self.kill()
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (int(self.rect.x -
+                                     offset_x), int(self.rect.y - offset_y)))
 
 
 class Exit(pygame.sprite.Sprite):
@@ -422,12 +432,9 @@ class Exit(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def update(self):
-        self.rect.x += screen_scroll
-        if pygame.sprite.collide_rect(self, player):
-            level += 1
-            # delete the item box
-            self.kill()
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (int(self.rect.x -
+                                     offset_x), int(self.rect.y - offset_y)))
 
 
 running = True
@@ -454,15 +461,14 @@ exit_group = pygame.sprite.Group()
 
 world = World()
 
-player = world.process_data(world_data)
-
+player, camera = world.process_data(world_data)
 
 # Game loop.
 while running:
     time_per_frame = Clock.tick(FPS)
     tick_in_seconds = time_per_frame / 1000.0
     current_time += time_per_frame
-    screen.fill((0, 0, 0))
+    canvas.fill((0, 0, 0))
 
     for event in pygame.event.get():
         # quit game
@@ -485,27 +491,36 @@ while running:
             if event.key == pygame.K_d:
                 moving_right = False
 
-    if player.alive:
-        if player.in_air:
-            player.set_action(Animation_type.Jump)  # 2: jump
-        elif moving_left or moving_right:
-            player.set_action(Animation_type.Walk)  # 1: run
-        else:
-            player.set_action(Animation_type.Idle)  # 0: idle
+    # if player.alive:
+    #     if player.in_air:
+    #         player.set_action(Animation_type.Jump)  # 2: jump
+    #     elif moving_left or moving_right:
+    #         player.set_action(Animation_type.Walk)  # 1: run
+    #     else:
+    #         player.set_action(Animation_type.Idle)  # 0: idle
 
     # Update.
-    background_scroll -= screen_scroll
-    screen_scroll = player.update(
+    player.update(
         moving_left, moving_right, current_time, tick_in_seconds)
     water_group.update()
-    enemies_group.update(current_time, tick_in_seconds)
+    for enemy in enemies_group:
+        enemy.update(current_time, time_per_frame)
     decoration_group.update()
     exit_group.update()
-    # print(f'{player.action, player.frame_index} & {player.local_time, player.update_time}')
+    # adjust camera to player
+    camera.scroll()
+    offset_x, offset_y = camera.offset.x, camera.offset.y
     # Draw.
-    draw_background()
-    world.draw()
-    enemies_group.draw(screen)
-    water_group.draw(screen)
-    player.draw()
+
+    draw_background(canvas, offset_x, offset_y)
+
+    for enemy in enemies_group:
+        enemy.draw(canvas, offset_x, offset_y)
+    player.draw(canvas, offset_x, offset_y)
+
+    for water in water_group:
+        water.draw(canvas, offset_x, offset_y)
+
+    world.draw(canvas, offset_x, offset_y)
+    screen.blit(canvas, (0, 0))
     pygame.display.update()

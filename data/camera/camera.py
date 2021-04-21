@@ -50,8 +50,9 @@ class Follow(CamScroll):
 
 
 class Border(CamScroll):
-    def __init__(self, camera, player):
+    def __init__(self, camera, player, map_length):
         CamScroll.__init__(self, camera, player)
+        self.map_length = map_length
 
     def scroll(self):
         self.camera.offset_float.x += (self.player.rect.x -
@@ -63,14 +64,14 @@ class Border(CamScroll):
 
         # x axis handle
         self.camera.offset.x = int(max(
-            CAMERA_LEFT, self.camera.offset.x))
+            0, self.camera.offset.x))
         self.camera.offset.x = int(min(
-            self.camera.offset.x, CAMERA_RIGHT - self.camera.DISPLAY_W))
+            self.camera.offset.x, self.map_length - self.camera.DISPLAY_W))
         # y axis handle
         self.camera.offset.y = int(max(
-            CAMERA_TOP, self.camera.offset.y))
+            0, self.camera.offset.y))
         self.camera.offset.y = int(min(
-            self.camera.offset.y, CAMERA_BOTTOM - self.camera.DISPLAY_H))
+            self.camera.offset.y, 600 - self.camera.DISPLAY_H))
 
 
 # camera with automatic linear movement

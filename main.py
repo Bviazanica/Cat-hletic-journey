@@ -3,10 +3,12 @@ import math
 import sys
 import os
 import csv
+import random
 from pygame.locals import *
 from enum import IntEnum
 from data.camera.camera import *
-Vector2 = pygame.math.Vector2
+from data.utility import *
+vec = pygame.math.Vector2
 
 pygame.init()
 
@@ -19,7 +21,8 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
 # define game variables
-GRAVITY = 0.75
+GRAVITY = 1
+GRAVITY_FORCE_LIMIT = 15
 ROWS = 15
 COLS = 50
 TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
@@ -40,9 +43,17 @@ scale = 1
 img_list = []
 for x in range(TILE_TYPES):
     img = pygame.image.load(f'platformer/data/images/Tiles/{x}.png')
-    img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+    if not x == 101:
+        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
     img_list.append(img)
 
+green_key_image = pygame.image.load(
+    f'platformer/data/images/Items/green_key.png')
+health_image = pygame.image.load(
+    f'platformer/data/images/Other/health.png')
+health_image = pygame.transform.scale(
+    health_image, (int(TILE_SIZE), int(TILE_SIZE)))
+health_image_width = health_image.get_width()
 
 sky_background_image = pygame.image.load(
     f'platformer/data/images/Backgrounds/level1/sky.png')
@@ -112,7 +123,6 @@ def load_entity_animations():
                     f'platformer/data/images/entities/{entity_type}/{animation}'))
 
                 for i in range(num_of_frames):
-                    # print(f'{entity_type} & {animation} - {i}')
                     img = pygame.image.load(
                         f'platformer/data/images/entities/{entity_type}/{animation}/{i}.png')
                     img = pygame.transform.scale(
@@ -144,11 +154,14 @@ class Animation_type(IntEnum):
 class World():
     def __init__(self):
         self.obstacles_list = []
+        self.invisible_obstacles_list = []
 
     def process_data(self, data):
         self.level_length = len(data[0])
+        self.platforms = []
         # iterate through each value in level data file
         for y, row in enumerate(data):
+            platform = []
             for x, tile in enumerate(row):
                 if tile >= 0:
                     img = img_list[tile]
@@ -156,29 +169,53 @@ class World():
                     img_rect.x = x * TILE_SIZE
                     img_rect.y = y * TILE_SIZE
                     tile_data = (img, img_rect)
-                    if tile in (66, 67, 68, 69, 70, 71, 72, 73, 88, 89, 90, 92, 94, 95, 96, 110, 111, 112, 115):
+
+                    if tile in (66, 67, 68, 69, 70, 88, 89, 90, 92, 94, 95, 96, 110, 111, 112, 115):
                         self.obstacles_list.append(tile_data)
-                    elif tile == 152:
+                    elif tile == 71:
+                        platform.append(PlatformPart(
+                            img, x*TILE_SIZE, y*TILE_SIZE))
+
+                    elif tile == 72:
+                        platform.append(PlatformPart(
+                            img, x*TILE_SIZE, y*TILE_SIZE))
+
+                    elif tile == 73:
+                        platform.append(PlatformPart(
+                            img, x*TILE_SIZE, y*TILE_SIZE))
+                        new_surface = pygame.Surface((
+                            int(len(platform) * TILE_SIZE), int(TILE_SIZE)))
+
+                        self.platforms.append(Platform(platform[0].rect.x, platform[0].rect.y, len(
+                            platform)*TILE_SIZE, TILE_SIZE, platform, new_surface, x))
+
+                        platform = []
+                    elif tile == 101:
                         key = Collectible(
-                            'Key;', img, x * TILE_SIZE, y * TILE_SIZE)
+                            'Key', img, x * TILE_SIZE, y * TILE_SIZE)
                         key_group.add(key)
                     elif tile in (232, 234, 254, 256):
                         water = Water(img, x * TILE_SIZE, y * TILE_SIZE)
                         water_group.add(water)
                     elif tile == 238:  # create player
-                        print(f'{x, TILE_SIZE}')
-                        player = Player(x * TILE_SIZE,
+                        player = Entity(0, x * TILE_SIZE,
                                         y * TILE_SIZE, 5)
                         camera = Camera(player)
                         border = Border(
                             camera, player, world.get_world_length())
                         camera.setmethod(border)
-                    elif tile == 239:  # create player
-                        new_enemy = Enemy(x * TILE_SIZE,
-                                          y * TILE_SIZE, 5)
+                    elif tile == 239:  # create enemy
+                        new_enemy = Entity(1, x * TILE_SIZE,
+                                           y * TILE_SIZE, 2)
                         enemies_group.add(new_enemy)
+                    elif tile == 56:  # create invis tile
+                        self.invisible_obstacles_list.append(tile_data)
+                    elif tile == 263:
+                        new_checkpoint = Checkpoint(
+                            img, x * TILE_SIZE, y * TILE_SIZE)
+                        checkpoints_group.add(new_checkpoint)
 
-        return player, camera
+        return player, camera, self.platforms
 
     def draw(self, canvas, offset_x, offset_y):
         for tile in self.obstacles_list:
@@ -193,11 +230,10 @@ class World():
         return self.level_length * TILE_SIZE
 
 
-class Player(pygame.sprite.Sprite):
-    def __init__(self, x, y, speed):
+class Entity(pygame.sprite.Sprite):
+    def __init__(self, entity_id, x, y, speed):
         pygame.sprite.Sprite.__init__(self)
-        self.entity_id = 0
-
+        self.entity_id = entity_id
         self.alive = True
         self.speed = speed
         self.direction = 1
@@ -208,82 +244,115 @@ class Player(pygame.sprite.Sprite):
         self.animation_list = animations_list[self.entity_id]
         self.frame_index = 0
         self.action = 0
+
         self.update_time = 0
         self.local_time = 0
+        self.air_timer = 0
 
         self.keys = 0
+        self.checkpoint_position = vec(0, 0)
 
+        # rect properties
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
         self.width = self.image.get_width()
         self.height = self.image.get_height()
 
-    def update(self, moving_left, moving_right, current_time, tick):
+        self.collision_treshold = 20
+
+        if self.entity_id == 0:
+            self.health_points = 1
+        elif self.entity_id == 1:
+            self.health_points = 1
+
+    def update(self, current_time, tick):
         self.local_time = current_time
         self.update_animation()
-        # reset movement variables
+
+    def move(self, moving_left, moving_right):
 
         dx = 0
         dy = 0
 
         if moving_left:
             dx = -self.speed
-            self.flip = True
-            self.direction = -1
+
         if moving_right:
             dx = self.speed
-            self.flip = False
-            self.direction = 1
-
-        # jump
-        if self.jump == True and self.in_air == False:
-            self.vel_y = -15
-            self.jump = False
-            self.in_air = True
 
         # apply gravity
         self.vel_y += GRAVITY
-        if self.vel_y > 10:
-            self.vel_y
-        dy += int(self.vel_y)
+        if self.vel_y > GRAVITY_FORCE_LIMIT:
+            self.vel_y = GRAVITY_FORCE_LIMIT
 
-        # check for collision
-        for tile in world.obstacles_list:
-            # check collision in the x direction
-            if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
+        dy += self.vel_y
+
+        self.in_air = True
+
+        if self.entity_id == 1:
+            for tile in world.invisible_obstacles_list:
+                # check collision in the x direction
+                if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
+                    self.direction *= -1
+
+        if self.entity_id == 0:
+            if self.rect.left + dx < 0 or self.rect.right + dx > (world.level_length * TILE_SIZE):
                 dx = 0
-            # check for collision in the y direction
-            if tile[1].colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
-                # check if below the ground, i.e. jumping
-                if self.vel_y < 0:
-                    self.vel_y = 0
-                    dy = tile[1].bottom - self.rect.top
-                # check if above the ground, i.e. falling
-                elif self.vel_y >= 0:
-                    self.vel_y = 0
-                    self.in_air = False
-                    dy = tile[1].top - self.rect.bottom
 
-        if self.rect.left + dx < 0 or self.rect.right + dx > (world.level_length * TILE_SIZE):
-            dx = 0
-        if self.rect.y + dy < 0 and self.vel_y < 0:
+        if self.rect.y + dy < 0:
+            dy = 0
             self.vel_y = 0
 
-        # update rectangle position
-        self.rect.x += dx
-        self.rect.y += dy
+        self.rect, colls = move(
+            self, [dx, dy], world.obstacles_list, all_platforms, enemies_group)
 
-        # # update scroll based on player position
-        # if (self.rect.right > SCREEN_WIDTH - SCROLL_THRESH and background_scroll < (world.level_length * TILE_SIZE) - SCREEN_WIDTH) or (self.rect.left < SCROLL_THRESH and background_scroll > abs(dx)):
-        #     self.rect.x -= dx
-        #     screen_scroll = -dx
+        if colls['bottom'] or colls['bottom-platform']:
+            self.vel_y = 0
+            self.air_timer = 0
+            self.in_air = False
+            dy = 0
+        else:
+            self.air_timer += 1
+
+        if colls['top']:
+            self.vel_y = 0
+
+        # if self.entity_id == 0:
+        #     print(f'{self.rect, colls, [dx,dy]}')
+
+    def ai(self):
+        if self.direction == 1:
+            ai_moving_right = True
+        else:
+            ai_moving_right = False
+        ai_moving_left = not ai_moving_right
+
+        self.move(ai_moving_left, ai_moving_right)
+
+    def reset_position(self, position):
+        self.rect.x = int(position[0])
+        self.rect.y = int(position[1])
+
+    def hurt(self):
+        if self.health_points - 1 > 0:
+            self.health_points -= 1
+            self.reset_position(self.checkpoint_position)
 
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
                                                                               offset_x), int(self.rect.y -
                                                                                              offset_y)))
 
+    def draw_keys(self, canvas):
+        canvas.blit(green_key_image, (int(10*scale), int(10*scale)))
+
+    def draw_health(self, canvas):
+        x = 10
+        for health in range(self.health_points):
+            canvas.blit(health_image, (x, SCREEN_HEIGHT - 50*scale))
+            x += health_image_width + 5*scale
+
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
         self.image = self.animation_list[self.action][self.frame_index]
@@ -301,87 +370,67 @@ class Player(pygame.sprite.Sprite):
             self.update_time = self.local_time
 
 
-class Enemy(pygame.sprite.Sprite):
-    def __init__(self, x, y, speed):
+class PlatformPart(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
         pygame.sprite.Sprite.__init__(self)
-        self.entity_id = 1
-        self.alive = True
-        self.speed = speed
-        self.direction = 1
-        self.vel_y = 0
-        self.jump = False
-        self.in_air = True
-        self.flip = False
-        self.animation_list = animations_list[self.entity_id]
-        self.frame_index = 0
-        self.action = 0
-        self.update_time = 0
-        self.local_time = 0
-
-        self.keys = 0
-
-        self.image = self.animation_list[self.action][self.frame_index]
+        self.image = img
         self.rect = self.image.get_rect()
-        self.rect.topleft = (x, y)
-        self.width = self.image.get_width()
-        self.height = self.image.get_height()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
 
-    def update(self, current_time, tick):
-        self.local_time = current_time
-        self.update_animation()
 
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, parts, surface, id):
+        pygame.sprite.Sprite.__init__(self)
+        self.platform_id = id
+        self.parts = parts
+
+        self.image = surface
+        self.image.set_colorkey((0, 0, 0))
+        self.rect = self.image.get_rect()
+
+        self.rect.x = x
+        self.rect.y = y
+
+        self.direction = random.choice([1])
+        self.speed = 1
+        self.move_x = 1
+        self.move_y = 0
+
+    def update(self):
         dx = 0
         dy = 0
 
-        dx = 1 if self.direction == 1 else -1
+        if self.direction == 1:
+            moving_right = True
+        else:
+            moving_right = False
+        moving_left = not moving_right
 
-        # apply gravity
-        self.vel_y += GRAVITY
-        if self.vel_y > 10:
-            self.vel_y
-        dy += int(self.vel_y)
+        if moving_left:
+            dx = -self.speed
 
-        # check for collision
+        if moving_right:
+            dx = self.speed
+
+        for tile in world.invisible_obstacles_list:
+            # check collision in the x direction
+            if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.rect.width, self.rect.height):
+                self.direction *= -1
+
         for tile in world.obstacles_list:
             # check collision in the x direction
-            if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
-                dx *= -1
+            if tile[1].colliderect(self.rect.x + dx, self.rect.y,  self.rect.width, self.rect.height):
+                self.direction *= -1
 
-            # check for collision in the y direction
-            if tile[1].colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
-                # check if above the ground, i.e. falling
-                if self.vel_y >= 0:
-                    self.vel_y = 0
-                    self.in_air = False
-                    dy = tile[1].top - self.rect.bottom
-
-        if self.rect.left + dx < 0:
-            dx = 0
-
-        # update rectangle position
         self.rect.x += dx
         self.rect.y += dy
 
     def draw(self, canvas, offset_x, offset_y):
+        for x, part in enumerate(self.parts):
+            self.image.blit(part.image, (x*TILE_SIZE, 0))
         canvas.blit(self.image, (int(self.rect.x -
                                      offset_x), int(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, (255, 0, 0),
-                         (int(self.rect.x - offset_x), int(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
-
-    def update_animation(self):
-        ANIMATION_COOLDOWN = 100
-        self.image = self.animation_list[self.action][self.frame_index]
-        if self.local_time - self.update_time > ANIMATION_COOLDOWN:
-            self.update_time = self.local_time
-            self.frame_index += 1
-        if self.frame_index >= len(self.animation_list[self.action]):
-            self.frame_index = 0
-
-    def set_action(self, new_action):
-        if new_action != self.action:
-            self.action = new_action
-            self.frame_index = 0
-            self.update_time = self.local_time
 
 
 class Decoration(pygame.sprite.Sprite):
@@ -409,6 +458,10 @@ class Water(pygame.sprite.Sprite):
         canvas.blit(self.image, (int(self.rect.x - offset_x),
                                  int(self.rect.y-offset_y)))
 
+    def collide_water(self, target):
+        if pygame.sprite.collide_rect(self, target):
+            target.hurt()
+
 
 class Collectible(pygame.sprite.Sprite):
     def __init__(self, coll_type, img, x, y):
@@ -422,6 +475,14 @@ class Collectible(pygame.sprite.Sprite):
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (int(self.rect.x -
                                      offset_x), int(self.rect.y - offset_y)))
+        pygame.draw.rect(canvas, (255, 0, 0),
+                         (int(self.rect.x - offset_x), int(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+
+    def collect(self, player):
+        if pygame.sprite.collide_rect(self, player):
+            if self.type == 'Key':
+                player.keys += 1
+                self.kill()
 
 
 class Exit(pygame.sprite.Sprite):
@@ -436,6 +497,36 @@ class Exit(pygame.sprite.Sprite):
         canvas.blit(self.image, (int(self.rect.x -
                                      offset_x), int(self.rect.y - offset_y)))
 
+    def next_level(self):
+        pass
+
+
+class Checkpoint(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+        self.location = (x, y)
+        self.active = True
+
+    def update(self, player):
+        if self.rect.colliderect(player.rect) and self.active:
+            player.checkpoint_position = vec(
+                self.rect.centerx, self.rect.y - 100*scale)
+            for checkpoint in checkpoints_group:
+                if checkpoint.rect.x < self.rect.x:
+                    checkpoint.active = False
+                elif checkpoint == self:
+                    self.active = False
+                    break
+
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (int(self.rect.x -
+                                     offset_x), int(self.rect.y - offset_y)))
+
 
 running = True
 current_time = 0
@@ -445,8 +536,7 @@ for row in range(ROWS):
     r = [-1] * COLS
     world_data.append(r)
 # load in level data and create world
-layer = 1
-with open(f'platformer/data/maps/level{1}layer{layer}.csv', newline='') as csvfile:
+with open(f'platformer/data/maps/level{level}.csv', newline='') as csvfile:
     reader = csv.reader(csvfile, delimiter=',')
     for x, row in enumerate(reader):
         for y, tile in enumerate(row):
@@ -458,10 +548,11 @@ key_group = pygame.sprite.Group()
 enemies_group = pygame.sprite.Group()
 collectible_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
+checkpoints_group = pygame.sprite.Group()
 
 world = World()
 
-player, camera = world.process_data(world_data)
+player, camera, all_platforms = world.process_data(world_data)
 
 # Game loop.
 while running:
@@ -469,7 +560,7 @@ while running:
     tick_in_seconds = time_per_frame / 1000.0
     current_time += time_per_frame
     canvas.fill((0, 0, 0))
-
+    # User input
     for event in pygame.event.get():
         # quit game
         if event.type == pygame.QUIT:
@@ -481,8 +572,10 @@ while running:
                 moving_left = True
             if event.key == pygame.K_d:
                 moving_right = True
-            if event.key == pygame.K_w and player.alive and not player.in_air:
-                player.jump = True
+            if event.key == pygame.K_w and player.alive:
+                if player.air_timer < 10:
+                    player.vel_y = -20
+                    player.jump = True
 
         # keyboard button released
         if event.type == pygame.KEYUP:
@@ -490,37 +583,51 @@ while running:
                 moving_left = False
             if event.key == pygame.K_d:
                 moving_right = False
+            if event.key == pygame.K_w:
+                player.jump = False
 
-    # if player.alive:
-    #     if player.in_air:
-    #         player.set_action(Animation_type.Jump)  # 2: jump
-    #     elif moving_left or moving_right:
-    #         player.set_action(Animation_type.Walk)  # 1: run
-    #     else:
-    #         player.set_action(Animation_type.Idle)  # 0: idle
+    # Update methods
+    player.update(current_time, tick_in_seconds)
+    player.move(moving_left, moving_right)
 
-    # Update.
-    player.update(
-        moving_left, moving_right, current_time, tick_in_seconds)
-    water_group.update()
     for enemy in enemies_group:
         enemy.update(current_time, time_per_frame)
-    decoration_group.update()
-    exit_group.update()
+        enemy.ai()
+
+    for platform in all_platforms:
+        platform.update()
+
+    for checkpoint in checkpoints_group:
+        checkpoint.update(player)
+
     # adjust camera to player
     camera.scroll()
     offset_x, offset_y = camera.offset.x, camera.offset.y
-    # Draw.
 
-    draw_background(canvas, offset_x, offset_y)
+    # Draw methods
+    # draw_background(canvas, offset_x, offset_y)
+    world.draw(canvas, offset_x, offset_y)
+
+    for checkpoint in checkpoints_group:
+        checkpoint.draw(canvas, offset_x, offset_y)
+
+    for platform in all_platforms:
+        platform.draw(canvas, offset_x, offset_y)
+
+    for key in key_group:
+        key.collect(player)
+        key.draw(canvas, offset_x, offset_y)
 
     for enemy in enemies_group:
         enemy.draw(canvas, offset_x, offset_y)
-    player.draw(canvas, offset_x, offset_y)
 
     for water in water_group:
+        water.collide_water(player)
         water.draw(canvas, offset_x, offset_y)
 
-    world.draw(canvas, offset_x, offset_y)
+    player.draw(canvas, offset_x, offset_y)
+    player.draw_keys(canvas)
+    player.draw_health(canvas)
+
     screen.blit(canvas, (0, 0))
     pygame.display.update()

@@ -14,7 +14,7 @@ def collision_not_tile(rect, object_list):
     return hit_list
 
 
-def move(entity, movement, tiles, platforms, sprites):
+def move_with_collisions(entity, movement, tiles, platforms, sprites):
     # we can treat platforms and tiles as same collision type
     collision_types = {'top': False, 'bottom': False,
                        'right': False, 'left': False, 'bottom-platform': False}
@@ -54,18 +54,6 @@ def move(entity, movement, tiles, platforms, sprites):
     # checking collisions for Y axis
     entity.rect.y += movement[1]
 
-    # y collision with platforms
-    hit_list = collision_not_tile(entity.rect, platforms)
-    for platform in hit_list:
-        if abs((entity.rect.bottom) - platform.rect.top) <= entity.collision_treshold:
-            if entity.entity_id == 0:
-                print(f'{entity.rect.bottom, platform.rect.top}')
-            entity.rect.bottom = platform.rect.top
-            collision_types['bottom-platform'] = True
-        elif abs((entity.rect.top) - platform.rect.bottom) <= entity.collision_treshold:
-            entity.rect.top = platform.rect.bottom
-            collision_types['top'] = True
-
     # y collision with tile objects
     hit_list = collision_tile(entity.rect, tiles)
     for tile in hit_list:
@@ -76,6 +64,18 @@ def move(entity, movement, tiles, platforms, sprites):
             entity.rect.top = tile.bottom
             collision_types['top'] = True
 
+     # y collision with platforms
+    hit_list = collision_not_tile(entity.rect, platforms)
+    on_platform = None
+    for platform in hit_list:
+        if abs((entity.rect.bottom) - platform.rect.top) <= entity.collision_treshold:
+            entity.rect.bottom = platform.rect.top
+            collision_types['bottom-platform'] = True
+            on_platform = platform
+        elif abs((entity.rect.top) - platform.rect.bottom) <= entity.collision_treshold:
+            entity.rect.top = platform.rect.bottom
+            collision_types['top'] = True
+
     # y collision with sprites
     hit_list = collision_not_tile(entity.rect, sprites)
     for sprite in hit_list:
@@ -84,4 +84,4 @@ def move(entity, movement, tiles, platforms, sprites):
         elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold:
             entity.hurt()
 
-    return entity.rect, collision_types
+    return entity.rect, collision_types, on_platform

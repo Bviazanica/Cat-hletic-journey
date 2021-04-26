@@ -304,7 +304,17 @@ class Entity(pygame.sprite.Sprite):
             dy = 0
             self.vel_y = 0
 
-        self.rect, colls = move(
+        on_platform = None
+        for platform in all_platforms:
+            if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
+                # check if above platform
+                if abs((self.rect.bottom + dy) - platform.rect.top) <= self.collision_treshold:
+                    on_platform = platform
+                # move sideways with the platform
+                if platform.move_x != 0:
+                    dx += platform.direction
+
+        self.rect, colls, on_platform = move_with_collisions(
             self, [dx, dy], world.obstacles_list, all_platforms, enemies_group)
 
         if colls['bottom'] or colls['bottom-platform']:
@@ -343,6 +353,10 @@ class Entity(pygame.sprite.Sprite):
         canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
                                                                               offset_x), int(self.rect.y -
                                                                                              offset_y)))
+
+        if self.entity_id == 0:
+            pygame.draw.rect(canvas, (255, 0, 0), (self.rect.x - offset_x,
+                                                   self.rect.y - offset_y, self.rect.width, self.rect.height), 2)
 
     def draw_keys(self, canvas):
         canvas.blit(green_key_image, (int(10*scale), int(10*scale)))

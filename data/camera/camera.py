@@ -57,21 +57,22 @@ class Border(CamScroll):
     def scroll(self):
         self.camera.offset_float.x += (self.player.rect.x -
                                        self.camera.offset_float.x + self.camera.CONST.x)
-        self.camera.offset_float.y += (self.player.rect.y -
-                                       self.camera.offset_float.y + self.camera.CONST.y)
-        self.camera.offset.x, self.camera.offset.y = int(
-            self.camera.offset_float.x), int(self.camera.offset_float.y)
+        # self.camera.offset_float.y += (self.player.rect.y -
+        #                                self.camera.offset_float.y + self.camera.CONST.y)
+        self.camera.offset.x, self.camera.offset.y = round(
+            self.camera.offset_float.x), round(self.camera.offset_float.y)
 
         # x axis handle
-        self.camera.offset.x = int(max(
+        self.camera.offset.x = round(max(
             0, self.camera.offset.x))
-        self.camera.offset.x = int(min(
+        self.camera.offset.x = round(min(
             self.camera.offset.x, self.map_length - self.camera.DISPLAY_W))
+
         # y axis handle
-        self.camera.offset.y = int(max(
-            0, self.camera.offset.y))
-        self.camera.offset.y = int(min(
-            self.camera.offset.y, 600 - self.camera.DISPLAY_H))
+        # self.camera.offset.y = round(max(
+        #     0, self.camera.offset.y))
+        # self.camera.offset.y = round(min(
+        #     self.camera.offset.y, 600 - self.camera.DISPLAY_H))
 
 
 # camera with automatic linear movement
@@ -80,4 +81,4 @@ class Auto(CamScroll):
         CamScroll.__init__(self, camera, player)
 
     def scroll(self):
-        self.camera.offset.x += 1
+        self.camera.offset.x += 5

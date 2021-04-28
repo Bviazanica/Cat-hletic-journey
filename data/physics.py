@@ -14,10 +14,10 @@ def collision_not_tile(rect, object_list):
     return hit_list
 
 
-def move_with_collisions(entity, movement, tiles, platforms, sprites):
+def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks):
     # we can treat platforms and tiles as same collision type
     collision_types = {'top': False, 'bottom': False,
-                       'right': False, 'left': False, 'bottom-platform': False}
+                       'right': False, 'left': False, 'bottom-platform': False, 'invisible-block-top': False}
     # check if desired movement is collision
     entity.rect.x += movement[0]
 
@@ -63,14 +63,22 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites):
             entity.rect.top = tile.bottom
             collision_types['top'] = True
 
-     # y collision with platforms
+    # y collision with invisible blocks
+    hit_list = collision_not_tile(entity.rect, invisible_blocks)
+    for block in hit_list:
+        if movement[1] < 0:
+            entity.rect.top = block.rect.bottom
+            block.visible = True
+            collision_types['invisible-block-top'] = True
+
+    # y collision with platforms
     hit_list = collision_not_tile(entity.rect, platforms)
     on_platform = None
     for platform in hit_list:
         if abs((entity.rect.bottom) - platform.rect.top) <= entity.collision_treshold:
-            if platform.move_x:
+            if platform.move_x or (platform.move_x == False and platform.move_y == False):
                 entity.rect.bottom = platform.rect.top
-            else:
+            elif platform.move_y:
                 entity.rect.bottom = platform.rect.top - 1
             collision_types['bottom-platform'] = True
             on_platform = platform

@@ -8,6 +8,7 @@ from pygame.locals import *
 from enum import IntEnum
 from data.camera.camera import *
 from data.physics import *
+from data.utility import *
 vec = pygame.math.Vector2
 
 pygame.init()
@@ -50,6 +51,17 @@ for x in range(TILE_TYPES):
     elif not x == 101:
         img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
     img_list.append(img)
+
+fake_platform_green = pygame.image.load(
+    f'platformer/data/images/Tiles/68.png')
+fake_ground_green = pygame.image.load(
+    f'platformer/data/images/Tiles/66.png')
+
+fake_platform_green = pygame.transform.scale(
+    fake_platform_green, (TILE_SIZE, TILE_SIZE))
+fake_ground_green = pygame.transform.scale(
+    fake_ground_green, (TILE_SIZE, TILE_SIZE))
+
 
 green_key_image = pygame.image.load(
     f'platformer/data/images/Items/green_key.png')
@@ -96,17 +108,17 @@ def draw_background(canvas, offset_x, offset_y):
     width = sky_background_image.get_width()
     for x in range(2):
         canvas.blit(rocks_background_image,
-                    (round(x*width - offset_x*0.1), round(0-offset_y*0.3)))
+                    (round(x*width - offset_x*0.1), 0))
         canvas.blit(mountain_background_image,
-                    (round(x*width - offset_x*0.15), round(0-offset_y*0.3)))
+                    (round(x*width - offset_x*0.15), 0))
         canvas.blit(clouds1_background_image,
-                    (round(x*width - offset_x*0.2), round(0-offset_y*0.3)))
+                    (round(x*width - offset_x*0.2), 0))
         canvas.blit(clouds2_background_image,
-                    (round(x*width - offset_x*0.3), round(0-offset_y*0.3)))
+                    (round(x*width - offset_x*0.3), 0))
         canvas.blit(clouds3_background_image,
-                    (round(x*width - offset_x*0.25), round(0-offset_y*0.3)))
+                    (round(x*width - offset_x*0.25), 0))
         canvas.blit(clouds4_background_image,
-                    (round(x*width - offset_x*0.3), round(0-offset_y*0.3)))
+                    (round(x*width - offset_x*0.3), 0))
 
 
 # load all images & animations
@@ -174,9 +186,10 @@ def load_level():
                 world_data[x][y] = int(tile)
 
     world = World()
-    player, camera, all_platforms = world.process_data(world_data)
+    player, camera, all_platforms, invisible_blocks = world.process_data(
+        world_data)
 
-    return world, player, camera, all_platforms
+    return world, player, camera, all_platforms, invisible_blocks
 
 
 class Animation_type(IntEnum):
@@ -192,13 +205,16 @@ class Animation_type(IntEnum):
 class World():
     def __init__(self):
         self.obstacles_list = []
-        self.invisible_obstacles_list = []
+        self.bounds_tiles_list = []
+        self.invisible_blocks_list = []
 
     def process_data(self, data):
         self.level_length = len(data[0])
         self.platforms = []
+
         # iterate through each value in level data file
         platform_id = 0
+        fake_platform_id = 0
         for y, row in enumerate(data):
             platform = []
             for x, tile in enumerate(row):
@@ -209,7 +225,7 @@ class World():
                     img_rect.y = y * TILE_SIZE
                     tile_data = (img, img_rect)
 
-                    if tile in (66, 67, 68, 69, 70, 88, 89, 90, 92, 94, 95, 96, 110, 111, 112, 115):
+                    if tile in (66, 67, 68, 69, 70, 89, 90, 92, 94, 95, 96, 111, 112, 115):
                         self.obstacles_list.append(tile_data)
                     elif tile == 71:
                         platform.append(PlatformPart(
@@ -225,10 +241,21 @@ class World():
                         new_surface = pygame.Surface((
                             int(len(platform) * TILE_SIZE), int(TILE_SIZE)))
 
-                        self.platforms.append(Platform(platform[0].rect.x, platform[0].rect.y, len(
-                            platform)*TILE_SIZE, TILE_SIZE, platform, new_surface, platform_id))
+                        self.platforms.append(Platform(
+                            platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id))
                         platform_id += 1
                         platform = []
+                    elif tile == 74:
+                        self.platforms.append(Platform(
+                            x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id))
+                        platform_id += 1
+                    elif tile == 110:
+                        if x == 7:
+                            new_fake_platform = FakePlatform(
+                                x * TILE_SIZE, y*TILE_SIZE, 3, 3, 'fall', fake_platform_id)
+                            fake_platform_id += 1
+                            fake_platforms_group.add(new_fake_platform)
+                            self.platforms.append(new_fake_platform)
                     elif tile == 101:
                         key = Collectible(
                             'Key', img, x * TILE_SIZE, y * TILE_SIZE)
@@ -236,6 +263,10 @@ class World():
                     elif tile in (130, 152, 174):
                         exit = Exit(img, x * TILE_SIZE, y * TILE_SIZE)
                         exit_group.add(exit)
+                    elif tile == 192:
+                        new_block = InvisibleBlock(
+                            img, x*TILE_SIZE, y*TILE_SIZE)
+                        self.invisible_blocks_list.append(new_block)
                     elif tile == 210 or tile == 211:
                         new_spike = Spike(img, x * TILE_SIZE, y * TILE_SIZE)
                         spikes_group.add(new_spike)
@@ -254,13 +285,13 @@ class World():
                                            y * TILE_SIZE, 2)
                         enemies_group.add(new_enemy)
                     elif tile == 56:  # create invis tile
-                        self.invisible_obstacles_list.append(tile_data)
+                        self.bounds_tiles_list.append(tile_data)
                     elif tile == 263:
                         new_checkpoint = Checkpoint(
                             img, x * TILE_SIZE, y * TILE_SIZE)
                         checkpoints_group.add(new_checkpoint)
 
-        return player, camera, self.platforms
+        return player, camera, self.platforms, self.invisible_blocks_list
 
     def draw(self, canvas, offset_x, offset_y):
         for tile in self.obstacles_list:
@@ -336,7 +367,7 @@ class Entity(pygame.sprite.Sprite):
         self.in_air = True
 
         if self.entity_id == 1:
-            for tile in world.invisible_obstacles_list:
+            for tile in world.bounds_tiles_list:
                 # check collision in the x direction
                 if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                     self.direction *= -1
@@ -344,6 +375,9 @@ class Entity(pygame.sprite.Sprite):
         if self.entity_id == 0:
             if self.rect.left + dx < 0 or self.rect.right + dx > (world.level_length * TILE_SIZE):
                 dx = 0
+            for fake_platform in fake_platforms_group:
+                if fake_platform.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height):
+                    fake_platform.activated = True
 
         if self.rect.y + dy < 0:
             dy = 0
@@ -359,7 +393,7 @@ class Entity(pygame.sprite.Sprite):
                 if platform.move_x != 0:
                     dx += platform.direction * platform.speed
         self.rect, colls, on_platform = move_with_collisions(
-            self, [dx, dy], world.obstacles_list, all_platforms, enemies_group)
+            self, [dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
 
         if colls['bottom'] or colls['bottom-platform']:
             self.vel_y = 0
@@ -435,7 +469,7 @@ class PlatformPart(pygame.sprite.Sprite):
 
 
 class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, width, height, parts, surface, id):
+    def __init__(self, x, y, parts, surface, id):
         pygame.sprite.Sprite.__init__(self)
         self.platform_id = id
         self.parts = parts
@@ -452,14 +486,11 @@ class Platform(pygame.sprite.Sprite):
     def update(self):
         dx = 0
         dy = 0
-
         if self.move_x:
             dx = self.direction * self.speed
-
         if self.move_y:
             dy = self.direction * self.speed
-
-        for tile in world.invisible_obstacles_list:
+        for tile in world.bounds_tiles_list:
             # check collision in the x direction
             if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.rect.width, self.rect.height):
                 dx *= -1
@@ -478,16 +509,20 @@ class Platform(pygame.sprite.Sprite):
 
         self.rect.x += dx
         self.rect.y += dy
-        # if self.platform_id == 2:
-        #     print(dy)
 
     def draw(self, canvas, offset_x, offset_y):
-        for x, part in enumerate(self.parts):
-            self.image.blit(part.image, (x*TILE_SIZE, 0))
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
-                                               round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        if self.parts == 1:
+            canvas.blit(self.image, (round(self.rect.x -
+                                           offset_x), round(self.rect.y - offset_y)))
+            pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        else:
+            for x, part in enumerate(self.parts):
+                self.image.blit(part.image, (x*TILE_SIZE, 0))
+            canvas.blit(self.image, (round(self.rect.x -
+                                           offset_x), round(self.rect.y - offset_y)))
+            pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
     def determine_movement_by_id(self, id):
         if id == 0:
@@ -503,13 +538,13 @@ class Platform(pygame.sprite.Sprite):
         elif id == 2:
             self.direction = 1
             self.speed = 1
-            self.move_x = 1
-            self.move_y = 0
+            self.move_x = 0
+            self.move_y = 1
         elif id == 3:
             self.direction = 1
             self.speed = 1
-            self.move_x = 1
-            self.move_y = 0
+            self.move_x = 0
+            self.move_y = 1
 
 
 class Decoration(pygame.sprite.Sprite):
@@ -562,6 +597,64 @@ class Collectible(pygame.sprite.Sprite):
             if self.type == 'Key':
                 player.keys += 1
                 self.kill()
+
+
+class FakePlatform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width_in_tiles, height_in_tiles, action, id):
+        pygame.sprite.Sprite.__init__(self)
+
+        new_surface = pygame.Surface((
+            int(width_in_tiles * TILE_SIZE), int(TILE_SIZE*height_in_tiles)))
+
+        surface = load_fake_platform_tiles(
+            width_in_tiles, height_in_tiles, new_surface, TILE_SIZE, fake_ground_green, fake_platform_green)
+
+        self.fake_platform_id = id
+        self.action = action
+        self.image = surface
+        self.rect = self.image.get_rect()
+
+        self.rect.x = x
+        self.rect.y = y
+
+        self.direction = 1
+        self.speed = 1
+        self.move_x = 0
+        self.move_y = 0
+
+        self.activated = False
+
+    def update(self):
+        if self.activated:
+            self.execute_action()
+
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))
+        pygame.draw.rect(canvas, (255, 0, 0),
+                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+
+    def execute_action(self):
+        if self.action == 'fall':
+            self.rect.y += self.speed
+
+
+class InvisibleBlock(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+        self.visible = False
+
+    def draw(self, canvas, offset_x, offset_y):
+        if self.visible:
+            canvas.blit(self.image, (round(self.rect.x -
+                                           offset_x), round(self.rect.y - offset_y)))
+        pygame.draw.rect(canvas, (255, 0, 0),
+                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 
 class Exit(pygame.sprite.Sprite):
@@ -634,8 +727,9 @@ collectible_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
 checkpoints_group = pygame.sprite.Group()
 spikes_group = pygame.sprite.Group()
+fake_platforms_group = pygame.sprite.Group()
 
-world, player, camera, all_platforms = load_level()
+world, player, camera, all_platforms, invisible_blocks = load_level()
 # Game loop.
 while running:
     time_per_frame = Clock.tick(FPS)
@@ -691,13 +785,23 @@ while running:
     for exit in exit_group:
         exit.update(player)
 
+    for block in invisible_blocks.copy():
+        if block.visible:
+            world.obstacles_list.append([block.image, block.rect])
+            invisible_blocks.pop(invisible_blocks.index(block))
+
+    for platform in all_platforms.copy():
+        if platform.rect.x > world.get_world_length() or platform.rect.x + platform.rect.width < 0 or \
+                platform.rect.y + platform.rect.height < 0 or platform.rect.y > 800:
+            all_platforms.pop(all_platforms.index(platform))
+
     if pygame.sprite.spritecollide(player, exit_group, False):
         level_complete = True
     # adjust camera to player
     camera.scroll()
     offset_x, offset_y = camera.offset.x, camera.offset.y
     # Draw methods
-    draw_background(canvas, offset_x, offset_y)
+    # draw_background(canvas, offset_x, offset_y)
     world.draw(canvas, offset_x, offset_y)
 
     for spike in spikes_group:
@@ -708,6 +812,9 @@ while running:
 
     for platform in all_platforms:
         platform.draw(canvas, offset_x, offset_y)
+
+    for block in invisible_blocks:
+        block.draw(canvas, offset_x, offset_y)
 
     for key in key_group:
         key.collect(player)

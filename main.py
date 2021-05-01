@@ -5,6 +5,7 @@ import os
 import csv
 import random
 from pygame.locals import *
+from data.button import Button
 from enum import IntEnum
 from data.camera.camera import *
 from data.physics import *
@@ -28,34 +29,16 @@ ROWS = 15
 COLS = 50
 TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
 TILE_TYPES = 264
-
-# level
-level = 0
-global level_complete
-level_complete = False
-# define player action variables
-moving_left = False
-moving_right = False
-
-
 # scale
 scale = 1
 
-# store tiles in a list
-img_list = []
-for x in range(TILE_TYPES):
-    img = pygame.image.load(f'platformer/data/images/Tiles/{x}.png')
-    if x == 210 or x == 210:
-        img = pygame.transform.scale(img, (TILE_SIZE, round(
-            TILE_SIZE/(img.get_width()/img.get_height()))))
-    elif not x == 101:
-        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-    img_list.append(img)
+button_clicked = pygame.image.load(
+    f'platformer/data/images/interface/button_1.png')
 
 fake_platform_green = pygame.image.load(
-    f'platformer/data/images/Tiles/68.png')
+    f'platformer/data/images/tiles/68.png')
 fake_ground_green = pygame.image.load(
-    f'platformer/data/images/Tiles/66.png')
+    f'platformer/data/images/tiles/66.png')
 
 fake_platform_green = pygame.transform.scale(
     fake_platform_green, (TILE_SIZE, TILE_SIZE))
@@ -64,27 +47,27 @@ fake_ground_green = pygame.transform.scale(
 
 
 green_key_image = pygame.image.load(
-    f'platformer/data/images/Items/green_key.png')
+    f'platformer/data/images/items/green_key.png')
 health_image = pygame.image.load(
-    f'platformer/data/images/Other/health.png')
+    f'platformer/data/images/other/health.png')
 health_image = pygame.transform.scale(
     health_image, (int(TILE_SIZE), int(TILE_SIZE)))
 health_image_width = health_image.get_width()
 
 sky_background_image = pygame.image.load(
-    f'platformer/data/images/Backgrounds/level1/sky.png')
+    f'platformer/data/images/backgrounds/level1/sky.png')
 rocks_background_image = pygame.image.load(
-    f'platformer/data/images/Backgrounds/level1/rocks_1.png')
+    f'platformer/data/images/backgrounds/level1/rocks_1.png')
 mountain_background_image = pygame.image.load(
-    f'platformer/data/images/Backgrounds/level1/rocks_2.png')
+    f'platformer/data/images/backgrounds/level1/rocks_2.png')
 clouds1_background_image = pygame.image.load(
-    f'platformer/data/images/Backgrounds/level1/clouds_1.png')
+    f'platformer/data/images/backgrounds/level1/clouds_1.png')
 clouds2_background_image = pygame.image.load(
-    f'platformer/data/images/Backgrounds/level1/clouds_2.png')
+    f'platformer/data/images/backgrounds/level1/clouds_2.png')
 clouds3_background_image = pygame.image.load(
-    f'platformer/data/images/Backgrounds/level1/clouds_3.png')
+    f'platformer/data/images/backgrounds/level1/clouds_3.png')
 clouds4_background_image = pygame.image.load(
-    f'platformer/data/images/Backgrounds/level1/clouds_4.png')
+    f'platformer/data/images/backgrounds/level1/clouds_4.png')
 
 sky_background_image = pygame.transform.scale(
     sky_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -100,6 +83,18 @@ clouds3_background_image = pygame.transform.scale(
     clouds3_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 clouds4_background_image = pygame.transform.scale(
     clouds4_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+
+# create sprite groups
+decoration_group = pygame.sprite.Group()
+water_group = pygame.sprite.Group()
+key_group = pygame.sprite.Group()
+enemies_group = pygame.sprite.Group()
+collectible_group = pygame.sprite.Group()
+exit_group = pygame.sprite.Group()
+checkpoints_group = pygame.sprite.Group()
+spikes_group = pygame.sprite.Group()
+fake_platforms_group = pygame.sprite.Group()
 
 
 def draw_background(canvas, offset_x, offset_y):
@@ -122,7 +117,7 @@ def draw_background(canvas, offset_x, offset_y):
 
 
 # load all images & animations
-def load_entity_animations():
+def load_entity_animations(scale):
     animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Roll', 'Use', 'Walk']
     entity_types = ['Player', 'Enemy']
 
@@ -151,7 +146,13 @@ def load_entity_animations():
     return list_of_loaded_animations
 
 
-animations_list = load_entity_animations()
+animations_list = load_entity_animations(scale)
+
+# create empty tile list
+world_data = []
+for row in range(ROWS):
+    r = [-1] * COLS
+    world_data.append(r)
 
 
 # reset level data
@@ -173,9 +174,9 @@ def reset_level():
     return data
 
 
-def load_level():
-    global level
+def load_level(level, img_list):
     level += 1
+    print(f'loaded {level}')
     bg_scroll = 0
     world_data = reset_level()
     # load in level data and create world
@@ -187,9 +188,9 @@ def load_level():
 
     world = World()
     player, camera, all_platforms, invisible_blocks = world.process_data(
-        world_data)
+        world_data, img_list)
 
-    return world, player, camera, all_platforms, invisible_blocks
+    return world, player, camera, all_platforms, invisible_blocks, level
 
 
 class Animation_type(IntEnum):
@@ -208,7 +209,7 @@ class World():
         self.bounds_tiles_list = []
         self.invisible_blocks_list = []
 
-    def process_data(self, data):
+    def process_data(self, data, img_list):
         self.level_length = len(data[0])
         self.platforms = []
 
@@ -346,7 +347,7 @@ class Entity(pygame.sprite.Sprite):
         self.local_time = current_time
         self.update_animation()
 
-    def move(self, moving_left, moving_right):
+    def move(self, moving_left, moving_right, world, all_platforms):
 
         dx = 0
         dy = 0
@@ -383,7 +384,6 @@ class Entity(pygame.sprite.Sprite):
             dy = 0
             self.vel_y = 0
 
-        # print(dy)
         on_platform = None
         for platform in all_platforms:
             if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
@@ -406,14 +406,14 @@ class Entity(pygame.sprite.Sprite):
         if colls['top']:
             self.vel_y = 0
 
-    def ai(self):
+    def ai(self, world, all_platforms):
         if self.direction == 1:
             ai_moving_right = True
         else:
             ai_moving_right = False
         ai_moving_left = not ai_moving_right
 
-        self.move(ai_moving_left, ai_moving_right)
+        self.move(ai_moving_left, ai_moving_right, world, all_platforms)
 
     def reset_position(self, position):
         self.rect.x = round(position[0])
@@ -423,6 +423,8 @@ class Entity(pygame.sprite.Sprite):
         if self.health_points - 1 > 0:
             self.health_points -= 1
             self.reset_position(self.checkpoint_position)
+        else:
+            self.alive = False
 
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
@@ -483,7 +485,7 @@ class Platform(pygame.sprite.Sprite):
 
         self.determine_movement_by_id(self.platform_id)
 
-    def update(self):
+    def update(self, world):
         dx = 0
         dy = 0
         if self.move_x:
@@ -528,8 +530,8 @@ class Platform(pygame.sprite.Sprite):
         if id == 0:
             self.direction = 1
             self.speed = 1
-            self.move_x = 0
-            self.move_y = 1
+            self.move_x = 1
+            self.move_y = 0
         elif id == 1:
             self.direction = 1
             self.speed = 1
@@ -538,13 +540,13 @@ class Platform(pygame.sprite.Sprite):
         elif id == 2:
             self.direction = 1
             self.speed = 1
-            self.move_x = 0
-            self.move_y = 1
+            self.move_x = 1
+            self.move_y = 0
         elif id == 3:
             self.direction = 1
             self.speed = 1
             self.move_x = 0
-            self.move_y = 1
+            self.move_y = 0
 
 
 class Decoration(pygame.sprite.Sprite):
@@ -624,7 +626,7 @@ class FakePlatform(pygame.sprite.Sprite):
 
         self.activated = False
 
-    def update(self):
+    def update(self, world):
         if self.activated:
             self.execute_action()
 
@@ -710,129 +712,269 @@ class Checkpoint(pygame.sprite.Sprite):
                                        offset_x), round(self.rect.y - offset_y)))
 
 
-running = True
-current_time = 0
-# create empty tile list
-world_data = []
-for row in range(ROWS):
-    r = [-1] * COLS
-    world_data.append(r)
+def game():
+    # level
+    level = 0
+    global level_complete
+    level_complete = False
 
-# create sprite groups
-decoration_group = pygame.sprite.Group()
-water_group = pygame.sprite.Group()
-key_group = pygame.sprite.Group()
-enemies_group = pygame.sprite.Group()
-collectible_group = pygame.sprite.Group()
-exit_group = pygame.sprite.Group()
-checkpoints_group = pygame.sprite.Group()
-spikes_group = pygame.sprite.Group()
-fake_platforms_group = pygame.sprite.Group()
+    # define player action variables
+    moving_left = False
+    moving_right = False
 
-world, player, camera, all_platforms, invisible_blocks = load_level()
-# Game loop.
-while running:
-    time_per_frame = Clock.tick(FPS)
-    tick_in_seconds = time_per_frame / 1000.0
-    current_time += time_per_frame
-    screen.fill((0, 0, 0))
-    canvas.fill((0, 0, 0))
+    # store tiles in a list
+    img_list = []
+    for x in range(TILE_TYPES):
+        img = pygame.image.load(f'platformer/data/images/tiles/{x}.png')
+        if x == 210 or x == 210:
+            img = pygame.transform.scale(img, (TILE_SIZE, round(
+                TILE_SIZE/(img.get_width()/img.get_height()))))
+        elif not x == 101:
+            img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+        img_list.append(img)
 
-    if level_complete:
-        world, player, camera, all_platforms = load_level()
-        level_complete = False
+    running = True
+    current_time = 0
 
-    # User input
-    for event in pygame.event.get():
-        # quit game
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
-        # keyboard presses
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_a:
-                moving_left = True
-            if event.key == pygame.K_d:
-                moving_right = True
-            if event.key == pygame.K_w and player.alive:
-                if player.air_timer < 10:
-                    player.vel_y = -20
-                    player.jump = True
+    world, player, camera, all_platforms, invisible_blocks, level = load_level(
+        level, img_list)
+    # Game loop.
+    while running:
+        time_per_frame = Clock.tick(FPS)
+        tick_in_seconds = time_per_frame / 1000.0
+        current_time += time_per_frame
+        screen.fill((0, 0, 0))
+        canvas.fill((0, 0, 0))
 
-        # keyboard button released
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_a:
-                moving_left = False
-            if event.key == pygame.K_d:
-                moving_right = False
-            if event.key == pygame.K_w:
-                player.jump = False
+        if level_complete:
+            world, player, camera, all_platforms, invisible_blocks, level = load_level(
+                level, img_list)
+            level_complete = False
 
-    # Update methods
-    for platform in all_platforms:
-        platform.update()
+        # User input
+        for event in pygame.event.get():
+            # quit game
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            # keyboard presses
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_a:
+                    moving_left = True
+                if event.key == pygame.K_d:
+                    moving_right = True
+                if event.key == pygame.K_w and player.alive:
+                    if player.air_timer < 10:
+                        player.vel_y = -20
+                        player.jump = True
 
-    player.update(current_time, tick_in_seconds)
-    player.move(moving_left, moving_right)
+            # keyboard button released
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_a:
+                    moving_left = False
+                if event.key == pygame.K_d:
+                    moving_right = False
+                if event.key == pygame.K_w:
+                    player.jump = False
+        if player.alive:
+            # Update methods
+            for platform in all_platforms:
+                platform.update(world)
 
-    for enemy in enemies_group:
-        enemy.update(current_time, time_per_frame)
-        enemy.ai()
+            player.update(current_time, tick_in_seconds)
+            player.move(moving_left, moving_right, world, all_platforms)
 
-    for checkpoint in checkpoints_group:
-        checkpoint.update(player)
+            for enemy in enemies_group:
+                enemy.update(current_time, time_per_frame)
+                enemy.ai(world, all_platforms)
 
-    for exit in exit_group:
-        exit.update(player)
+            for checkpoint in checkpoints_group:
+                checkpoint.update(player)
 
-    for block in invisible_blocks.copy():
-        if block.visible:
-            world.obstacles_list.append([block.image, block.rect])
-            invisible_blocks.pop(invisible_blocks.index(block))
+            for exit in exit_group:
+                exit.update(player)
 
-    for platform in all_platforms.copy():
-        if platform.rect.x > world.get_world_length() or platform.rect.x + platform.rect.width < 0 or \
-                platform.rect.y + platform.rect.height < 0 or platform.rect.y > 800:
-            all_platforms.pop(all_platforms.index(platform))
+            for block in invisible_blocks.copy():
+                if block.visible:
+                    world.obstacles_list.append([block.image, block.rect])
+                    invisible_blocks.pop(invisible_blocks.index(block))
 
-    if pygame.sprite.spritecollide(player, exit_group, False):
-        level_complete = True
-    # adjust camera to player
-    camera.scroll()
-    offset_x, offset_y = camera.offset.x, camera.offset.y
-    # Draw methods
-    # draw_background(canvas, offset_x, offset_y)
-    world.draw(canvas, offset_x, offset_y)
+            for platform in all_platforms.copy():
+                if platform.rect.x > world.get_world_length() or platform.rect.x + platform.rect.width < 0 or \
+                        platform.rect.y + platform.rect.height < 0 or platform.rect.y > 800:
+                    all_platforms.pop(all_platforms.index(platform))
 
-    for spike in spikes_group:
-        spike.draw(canvas, offset_x, offset_y)
+            if pygame.sprite.spritecollide(player, exit_group, False):
+                level_complete = True
+            # adjust camera to player
+            camera.scroll()
+            offset_x, offset_y = camera.offset.x, camera.offset.y
+            # Draw methods
+            # draw_background(canvas, offset_x, offset_y)
+            world.draw(canvas, offset_x, offset_y)
 
-    for checkpoint in checkpoints_group:
-        checkpoint.draw(canvas, offset_x, offset_y)
+            for spike in spikes_group:
+                spike.draw(canvas, offset_x, offset_y)
 
-    for platform in all_platforms:
-        platform.draw(canvas, offset_x, offset_y)
+            for checkpoint in checkpoints_group:
+                checkpoint.draw(canvas, offset_x, offset_y)
 
-    for block in invisible_blocks:
-        block.draw(canvas, offset_x, offset_y)
+            for platform in all_platforms:
+                platform.draw(canvas, offset_x, offset_y)
 
-    for key in key_group:
-        key.collect(player)
-        key.draw(canvas, offset_x, offset_y)
+            for block in invisible_blocks:
+                block.draw(canvas, offset_x, offset_y)
 
-    for enemy in enemies_group:
-        enemy.draw(canvas, offset_x, offset_y)
+            for key in key_group:
+                key.collect(player)
+                key.draw(canvas, offset_x, offset_y)
 
-    for exit in exit_group:
-        exit.draw(canvas, offset_x, offset_y)
+            for enemy in enemies_group:
+                enemy.draw(canvas, offset_x, offset_y)
 
-    for water in water_group:
-        water.collide_water(player)
-        water.draw(canvas, offset_x, offset_y)
+            for exit in exit_group:
+                exit.draw(canvas, offset_x, offset_y)
 
-    player.draw(canvas, offset_x, offset_y)
-    player.draw_keys(canvas)
-    player.draw_health(canvas)
-    screen.blit(canvas, (0, 0))
+            for water in water_group:
+                water.collide_water(player)
+                water.draw(canvas, offset_x, offset_y)
 
-    pygame.display.update()
+            player.draw(canvas, offset_x, offset_y)
+            player.draw_keys(canvas)
+            player.draw_health(canvas)
+        elif player.alive == False:
+            world, player, camera, all_platforms, invisible_blocks, level = game_over_menu(player,
+                                                                                           level, img_list)
+
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
+
+
+def game_over_menu(player, level, img_list):
+    world = None
+    camera = None
+    all_platforms = None
+    invisible_blocks = None
+    level = None
+    clickable = True
+    x = 0
+    number_of_buttons = 2
+    buttons = []
+    for x, button in enumerate(range(number_of_buttons)):
+        button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
+                        x*button_clicked.get_height()*2, 'menu', button_clicked, x)
+        buttons.append(button)
+
+    for button in buttons:
+        if button.draw(canvas):
+            if clickable:
+                if button.button_id == 0:
+                    world_data = reset_level()
+                    world, player, camera, all_platforms, invisible_blocks, level = load_level(
+                        0, img_list)
+                elif button.button_id == 1:
+                    pygame.quit()
+                    sys.exit()
+                clickable = False
+
+    return world, player, camera, all_platforms, invisible_blocks, level
+
+
+def main_menu():
+    x = 0
+    number_of_buttons = 5
+    buttons = []
+    for x, button in enumerate(range(number_of_buttons)):
+        button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//10 +
+                        x*button_clicked.get_height()*2, 'menu', button_clicked, x)
+        buttons.append(button)
+    running = True
+    clickable = True
+    while running:
+        clickable = True
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+                if event.key == K_m:
+                    music_handler.toggle()
+
+        for button in buttons:
+            if button.draw(canvas):
+                if clickable:
+                    if button.button_id == 0:
+                        game()
+                    elif button.button_id == 1:
+                        controls()
+                    elif button.button_id == 2:
+                        show_credits()
+                    elif button.button_id == 3:
+                        settings()
+                    elif button.button_id == 4:
+                        pygame.quit()
+                        sys.exit()
+                    clickable = False
+
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
+
+
+def controls():
+    running = True
+    while running:
+        canvas.fill((0, 0, 0))
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    running = False
+                if event.key == K_m:
+                    music_handler.toggle()
+
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
+
+
+def show_credits():
+    running = True
+    while running:
+        canvas.fill((0, 0, 0))
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    running = False
+                if event.key == K_m:
+                    music_handler.toggle()
+
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
+
+
+def settings():
+    running = True
+    while running:
+        canvas.fill((0, 0, 0))
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    running = False
+                if event.key == K_m:
+                    music_handler.toggle()
+
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
+
+
+main_menu()

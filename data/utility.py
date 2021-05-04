@@ -6,3 +6,10 @@ def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, pl
             else:
                 surface.blit(ground_image, (y*TILE_SIZE, x*TILE_SIZE))
     return surface
+
+
+def draw_text(text, font, color, surface, x, y):
+    textobj = font.render(text, 1, color)
+    textrect = textobj.get_rect()
+    textrect.midtop = (x, y)
+    surface.blit(textobj, textrect)

@@ -14,7 +14,7 @@ def collision_not_tile(rect, object_list):
     return hit_list
 
 
-def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks):
+def move_with_collisions(entity,tick, movement, tiles, platforms, sprites, invisible_blocks):
     # we can treat platforms and tiles as same collision type
     collision_types = {'top': False, 'bottom': False,
                        'right': False, 'left': False, 'bottom-platform': False, 'invisible-block-top': False}
@@ -47,7 +47,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
     if entity.entity_id == 0:
         # x collision with sprites
         hit_list = collision_not_tile(entity.rect, sprites)
-        if len(hit_list):
+        if len(hit_list) and not entity.invulnerability:
             entity.hurt()
 
     # checking collisions for Y axis
@@ -91,7 +91,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
     for sprite in hit_list:
         if abs((entity.rect.bottom) - sprite.rect.top) <= entity.collision_treshold:
             sprite.kill()
-        elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold:
+        elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold and not entity.invulnerability:
             entity.hurt()
 
     return entity.rect, collision_types, on_platform

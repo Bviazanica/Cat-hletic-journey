@@ -29,6 +29,10 @@ ROWS = 15
 COLS = 50
 TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
 TILE_TYPES = 264
+
+# font
+font = pygame.font.Font('platformer/data/font/kenney_blocks.ttf', 70)
+
 # scale
 scale = 1
 
@@ -69,6 +73,28 @@ clouds3_background_image = pygame.image.load(
 clouds4_background_image = pygame.image.load(
     f'platformer/data/images/backgrounds/level1/clouds_4.png')
 
+bubble_item_image = pygame.image.load(
+    f'platformer/data/images/tiles/57.png')
+boost_item_image = pygame.image.load(
+    f'platformer/data/images/tiles/58.png')
+health_item_image = pygame.image.load(
+    f'platformer/data/images/tiles/59.png')
+
+bubble_image =  pygame.image.load(
+    f'platformer/data/images/other/bubble.png')
+
+
+item_boxes = {
+	'Bubble'	: bubble_item_image,
+	'Boost'		: boost_item_image,
+	'Health'	: health_item_image
+}
+
+effect_durations = {
+    'Bubble':5000,
+    'Boost':5000
+}
+
 sky_background_image = pygame.transform.scale(
     sky_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 rocks_background_image = pygame.transform.scale(
@@ -84,7 +110,9 @@ clouds3_background_image = pygame.transform.scale(
 clouds4_background_image = pygame.transform.scale(
     clouds4_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
-
+bubble_image = pygame.transform.scale(
+    bubble_image, (TILE_SIZE*2, TILE_SIZE*2))
+bubble_rect = bubble_image.get_rect()
 # create sprite groups
 decoration_group = pygame.sprite.Group()
 water_group = pygame.sprite.Group()
@@ -95,26 +123,11 @@ exit_group = pygame.sprite.Group()
 checkpoints_group = pygame.sprite.Group()
 spikes_group = pygame.sprite.Group()
 fake_platforms_group = pygame.sprite.Group()
+items_group = pygame.sprite.Group()
 
 
 def draw_background(canvas, offset_x, offset_y):
     canvas.blit(sky_background_image, (0, 0))
-
-    width = sky_background_image.get_width()
-    for x in range(2):
-        canvas.blit(rocks_background_image,
-                    (round(x*width - offset_x*0.1), 0))
-        canvas.blit(mountain_background_image,
-                    (round(x*width - offset_x*0.15), 0))
-        canvas.blit(clouds1_background_image,
-                    (round(x*width - offset_x*0.2), 0))
-        canvas.blit(clouds2_background_image,
-                    (round(x*width - offset_x*0.3), 0))
-        canvas.blit(clouds3_background_image,
-                    (round(x*width - offset_x*0.25), 0))
-        canvas.blit(clouds4_background_image,
-                    (round(x*width - offset_x*0.3), 0))
-
 
 # load all images & animations
 def load_entity_animations(scale):
@@ -228,6 +241,16 @@ class World():
 
                     if tile in (66, 67, 68, 69, 70, 89, 90, 92, 94, 95, 96, 111, 112, 115):
                         self.obstacles_list.append(tile_data)
+
+                    elif tile == 57:
+                        new_item = Item(bubble_item_image,'Bubble', x*TILE_SIZE, y*TILE_SIZE)
+                        items_group.add(new_item)
+                    elif tile == 58:
+                        new_item = Item(health_item_image,'Health', x*TILE_SIZE, y*TILE_SIZE)
+                        items_group.add(new_item)
+                    elif tile == 59:
+                        new_item = Item(boost_item_image,'Boost', x*TILE_SIZE, y*TILE_SIZE)
+                        items_group.add(new_item)
                     elif tile == 71:
                         platform.append(PlatformPart(
                             img, x*TILE_SIZE, y*TILE_SIZE))
@@ -312,12 +335,18 @@ class Entity(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.entity_id = entity_id
         self.alive = True
+
         self.speed = speed
         self.direction = 1
+
+        self.moving_left = False
+        self.moving_right = False
+
         self.vel_y = 0
         self.jump = False
         self.in_air = True
         self.flip = False
+
         self.animation_list = animations_list[self.entity_id]
         self.frame_index = 0
         self.action = 0
@@ -329,6 +358,12 @@ class Entity(pygame.sprite.Sprite):
         self.keys = 0
         self.checkpoint_position = vec(0, 0)
 
+        self.invulnerability = False
+        self.boosted = False
+
+        self.invulnerability_start_time = 0
+        self.boost_start_time = 0
+        
         # rect properties
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
@@ -343,18 +378,27 @@ class Entity(pygame.sprite.Sprite):
         elif self.entity_id == 1:
             self.health_points = 1
 
-    def update(self, current_time, tick):
+    def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
         self.update_animation()
 
-    def move(self, moving_left, moving_right, world, all_platforms):
+        if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
+            self.invulnerability = False
+        if self.boosted and self.local_time - self.boost_start_time > effect_durations['Boost']:
+            self.boosted = False
+        
+        if self.entity_id == 0:
+            self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
+        elif self.entity_id == 1:
+            self.determine_movement()
+            self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
 
+    def move(self, moving_left, moving_right, world, all_platforms,tick):
         dx = 0
         dy = 0
 
         if moving_left:
             dx = -self.speed
-
         if moving_right:
             dx = self.speed
 
@@ -364,7 +408,6 @@ class Entity(pygame.sprite.Sprite):
             self.vel_y = GRAVITY_FORCE_LIMIT
 
         dy += self.vel_y
-
         self.in_air = True
 
         if self.entity_id == 1:
@@ -380,6 +423,10 @@ class Entity(pygame.sprite.Sprite):
                 if fake_platform.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height):
                     fake_platform.activated = True
 
+            for spike in spikes_group:
+                if spike.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height) and not self.invulnerability:
+                    self.hurt()
+
         if self.rect.y + dy < 0:
             dy = 0
             self.vel_y = 0
@@ -393,7 +440,7 @@ class Entity(pygame.sprite.Sprite):
                 if platform.move_x != 0:
                     dx += platform.direction * platform.speed
         self.rect, colls, on_platform = move_with_collisions(
-            self, [dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
+            self, tick,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
 
         if colls['bottom'] or colls['bottom-platform']:
             self.vel_y = 0
@@ -406,15 +453,13 @@ class Entity(pygame.sprite.Sprite):
         if colls['top']:
             self.vel_y = 0
 
-    def ai(self, world, all_platforms):
+    def determine_movement(self):
         if self.direction == 1:
-            ai_moving_right = True
+            self.moving_right = True
         else:
-            ai_moving_right = False
-        ai_moving_left = not ai_moving_right
-
-        self.move(ai_moving_left, ai_moving_right, world, all_platforms)
-
+            self.moving_right = False
+        self.moving_left = not self.moving_right
+        
     def reset_position(self, position):
         self.rect.x = round(position[0])
         self.rect.y = round(position[1])
@@ -430,10 +475,13 @@ class Entity(pygame.sprite.Sprite):
         canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
                                                                               offset_x), int(self.rect.y -
                                                                                              offset_y)))
-
         if self.entity_id == 0:
+            bubble_rect.center = self.rect.center
             pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
                                                    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            if self.invulnerability:
+                canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
+
 
     def draw_keys(self, canvas):
         canvas.blit(green_key_image, (round(10*scale), round(10*scale)))
@@ -547,6 +595,35 @@ class Platform(pygame.sprite.Sprite):
             self.speed = 1
             self.move_x = 0
             self.move_y = 0
+
+class Item(pygame.sprite.Sprite):
+    def __init__(self, image, item_type, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.item_type = item_type
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
+    
+    def update(self, target, current_time):
+        if pygame.sprite.collide_rect(self, target):
+            self.action(target, current_time)
+            self.kill()
+
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x -
+                                    offset_x), round(self.rect.y - offset_y)))
+
+    def action(self, target, current_time):
+        if self.item_type == 'Health':
+            target.health_points +=1
+        elif self.item_type == 'Bubble':
+            target.invulnerability = True
+            target.invulnerability_start_time = current_time
+        elif self.item_type == 'Boost':
+            target.boosted = True
+            target.boost_start_time = current_time
+        
+        
 
 
 class Decoration(pygame.sprite.Sprite):
@@ -745,7 +822,7 @@ def game():
         current_time += time_per_frame
         screen.fill((0, 0, 0))
         canvas.fill((0, 0, 0))
-
+        # print(tick_in_seconds)
         if level_complete:
             world, player, camera, all_platforms, invisible_blocks, level = load_level(
                 level, img_list)
@@ -760,9 +837,9 @@ def game():
             # keyboard presses
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_a:
-                    moving_left = True
+                    player.moving_left = True
                 if event.key == pygame.K_d:
-                    moving_right = True
+                    player.moving_right = True
                 if event.key == pygame.K_w and player.alive:
                     if player.air_timer < 10:
                         player.vel_y = -20
@@ -771,25 +848,27 @@ def game():
             # keyboard button released
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_a:
-                    moving_left = False
+                    player.moving_left = False
                 if event.key == pygame.K_d:
-                    moving_right = False
+                    player.moving_right = False
                 if event.key == pygame.K_w:
                     player.jump = False
+
         if player.alive:
             # Update methods
             for platform in all_platforms:
                 platform.update(world)
 
-            player.update(current_time, tick_in_seconds)
-            player.move(moving_left, moving_right, world, all_platforms)
+            player.update(current_time, tick_in_seconds,  world, all_platforms)
 
             for enemy in enemies_group:
-                enemy.update(current_time, time_per_frame)
-                enemy.ai(world, all_platforms)
+                enemy.update(current_time, tick_in_seconds, world, all_platforms)
 
             for checkpoint in checkpoints_group:
                 checkpoint.update(player)
+
+            for item in items_group:
+                item.update(player,current_time)
 
             for exit in exit_group:
                 exit.update(player)
@@ -810,8 +889,11 @@ def game():
             camera.scroll()
             offset_x, offset_y = camera.offset.x, camera.offset.y
             # Draw methods
-            # draw_background(canvas, offset_x, offset_y)
+            draw_background(canvas, offset_x, offset_y)
+
             world.draw(canvas, offset_x, offset_y)
+            for item in items_group:
+                item.draw(canvas, offset_x, offset_y)
 
             for spike in spikes_group:
                 spike.draw(canvas, offset_x, offset_y)
@@ -900,8 +982,6 @@ def main_menu():
                 if event.key == K_ESCAPE:
                     pygame.quit()
                     sys.exit()
-                if event.key == K_m:
-                    music_handler.toggle()
 
         for button in buttons:
             if button.draw(canvas):
@@ -934,8 +1014,6 @@ def controls():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-                if event.key == K_m:
-                    music_handler.toggle()
 
         screen.blit(canvas, (0, 0))
         pygame.display.update()
@@ -952,8 +1030,6 @@ def show_credits():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-                if event.key == K_m:
-                    music_handler.toggle()
 
         screen.blit(canvas, (0, 0))
         pygame.display.update()
@@ -970,8 +1046,6 @@ def settings():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-                if event.key == K_m:
-                    music_handler.toggle()
 
         screen.blit(canvas, (0, 0))
         pygame.display.update()

@@ -20,7 +20,6 @@ def move_with_collisions(entity,tick, movement, tiles, platforms, sprites, invis
                        'right': False, 'left': False, 'bottom-platform': False, 'invisible-block-top': False}
     # check if desired movement is collision
     entity.rect.x += movement[0]
-
     # first we check X axis collisions
     # x collision with tile objects
     hit_list = collision_tile(entity.rect, tiles)
@@ -31,7 +30,7 @@ def move_with_collisions(entity,tick, movement, tiles, platforms, sprites, invis
         elif movement[0] < 0:
             entity.rect.left = tile.right
             collision_types['left'] = True
-        if entity.entity_id == 1:
+        if entity.entity_id != 0:
             entity.direction *= -1
 
     # x collision for platforms
@@ -83,15 +82,16 @@ def move_with_collisions(entity,tick, movement, tiles, platforms, sprites, invis
             collision_types['bottom-platform'] = True
             on_platform = platform
         elif abs((entity.rect.top) - platform.rect.bottom) <= entity.collision_treshold:
-            entity.rect.top = platform.rect.bottom + platform.speed + 1
+            entity.rect.top = platform.rect.bottom  + 1
             collision_types['top'] = True
 
     # y collision with sprites
-    hit_list = collision_not_tile(entity.rect, sprites)
-    for sprite in hit_list:
-        if abs((entity.rect.bottom) - sprite.rect.top) <= entity.collision_treshold:
-            sprite.kill()
-        elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold and not entity.invulnerability:
-            entity.hurt()
+    if entity.entity_id == 0:
+        hit_list = collision_not_tile(entity.rect, sprites)
+        for sprite in hit_list:
+            if abs((entity.rect.bottom) - sprite.rect.top) <= entity.collision_treshold:
+                sprite.kill()
+            elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold and not entity.invulnerability:
+                entity.hurt()
 
     return entity.rect, collision_types, on_platform

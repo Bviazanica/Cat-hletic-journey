@@ -81,4 +81,4 @@ class Auto(CamScroll):
         CamScroll.__init__(self, camera, player)
 
     def scroll(self):
-        self.camera.offset.x += 5
+        self.camera.offset.x += 1

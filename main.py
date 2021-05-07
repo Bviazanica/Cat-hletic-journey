@@ -26,7 +26,7 @@ canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 GRAVITY = 1
 GRAVITY_FORCE_LIMIT = 15
 ROWS = 15
-COLS = 50
+COLS = 200
 TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
 TILE_TYPES = 264
 
@@ -35,6 +35,8 @@ font = pygame.font.Font('platformer/data/font/kenney_blocks.ttf', 70)
 
 # scale
 scale = 1
+wingman_image = pygame.image.load(
+    f'platformer/data/images/entities/Wingman/Walk/0.png')
 
 button_clicked = pygame.image.load(
     f'platformer/data/images/interface/button_1.png')
@@ -83,13 +85,6 @@ health_item_image = pygame.image.load(
 bubble_image =  pygame.image.load(
     f'platformer/data/images/other/bubble.png')
 
-
-item_boxes = {
-	'Bubble'	: bubble_item_image,
-	'Boost'		: boost_item_image,
-	'Health'	: health_item_image
-}
-
 effect_durations = {
     'Bubble':5000,
     'Boost':5000
@@ -124,7 +119,8 @@ checkpoints_group = pygame.sprite.Group()
 spikes_group = pygame.sprite.Group()
 fake_platforms_group = pygame.sprite.Group()
 items_group = pygame.sprite.Group()
-
+clouds_group = pygame.sprite.Group()
+wingmans_group = pygame.sprite.Group()
 
 def draw_background(canvas, offset_x, offset_y):
     canvas.blit(sky_background_image, (0, 0))
@@ -132,7 +128,7 @@ def draw_background(canvas, offset_x, offset_y):
 # load all images & animations
 def load_entity_animations(scale):
     animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Roll', 'Use', 'Walk']
-    entity_types = ['Player', 'Enemy']
+    entity_types = ['Player', 'Runner', 'Spikeman']
 
     list_of_loaded_animations = []
     for entity_type in entity_types:
@@ -177,19 +173,21 @@ def reset_level():
     collectible_group.empty()
     exit_group.empty()
     checkpoints_group.empty()
-
+    spikes_group.empty()
+    fake_platforms_group.empty()
+    items_group.empty()
+    clouds_group.empty()
+    wingmans_group.empty()
     # create empty tile list
     data = []
     for row in range(ROWS):
         r = [-1] * COLS
         data.append(r)
-
     return data
 
 
 def load_level(level, img_list):
     level += 1
-    print(f'loaded {level}')
     bg_scroll = 0
     world_data = reset_level()
     # load in level data and create world
@@ -201,7 +199,7 @@ def load_level(level, img_list):
 
     world = World()
     player, camera, all_platforms, invisible_blocks = world.process_data(
-        world_data, img_list)
+        world_data, img_list, level)
 
     return world, player, camera, all_platforms, invisible_blocks, level
 
@@ -222,7 +220,7 @@ class World():
         self.bounds_tiles_list = []
         self.invisible_blocks_list = []
 
-    def process_data(self, data, img_list):
+    def process_data(self, data, img_list, level):
         self.level_length = len(data[0])
         self.platforms = []
 
@@ -299,17 +297,23 @@ class World():
                         water_group.add(water)
                     elif tile == 238:  # create player
                         player = Entity(0, x * TILE_SIZE,
-                                        y * TILE_SIZE, 5)
+                                        y * TILE_SIZE, 300)
                         camera = Camera(player)
-                        border = Border(
-                            camera, player, self.get_world_length())
-                        camera.setmethod(border)
+                        camera_type = Border(
+                                camera, player, self.get_world_length())
+                        camera.setmethod(camera_type)
                     elif tile == 239:  # create enemy
                         new_enemy = Entity(1, x * TILE_SIZE,
-                                           y * TILE_SIZE, 2)
+                                           y * TILE_SIZE, 100)
                         enemies_group.add(new_enemy)
                     elif tile == 56:  # create invis tile
                         self.bounds_tiles_list.append(tile_data)
+                    elif tile == 260:
+                        new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE -100, 10)
+                        enemies_group.add(new_spikeman)
+                    elif tile == 261:
+                        new_wingman = Wingman( x * TILE_SIZE, y * TILE_SIZE, 200)
+                        enemies_group.add(new_wingman)
                     elif tile == 263:
                         new_checkpoint = Checkpoint(
                             img, x * TILE_SIZE, y * TILE_SIZE)
@@ -365,22 +369,25 @@ class Entity(pygame.sprite.Sprite):
         self.boost_start_time = 0
         
         # rect properties
+        if self.entity_id ==2:
+            self.action = 6
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
         self.width = self.image.get_width()
         self.height = self.image.get_height()
 
-        self.collision_treshold = 16
+        self.collision_treshold = 25
 
         if self.entity_id == 0:
             self.health_points = 1
-        elif self.entity_id == 1:
+        elif self.entity_id != 0:
             self.health_points = 1
 
     def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
-        self.update_animation()
+        if self.entity_id == 2:
+            print(f'{self.rect}')
 
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
             self.invulnerability = False
@@ -389,7 +396,7 @@ class Entity(pygame.sprite.Sprite):
         
         if self.entity_id == 0:
             self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
-        elif self.entity_id == 1:
+        elif self.entity_id != 0:
             self.determine_movement()
             self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
 
@@ -398,24 +405,27 @@ class Entity(pygame.sprite.Sprite):
         dy = 0
 
         if moving_left:
-            dx = -self.speed
+            dx = -self.speed * tick
         if moving_right:
-            dx = self.speed
-
+            dx = self.speed * tick
+        
         # apply gravity
-        self.vel_y += GRAVITY
+        self.vel_y += 1
         if self.vel_y > GRAVITY_FORCE_LIMIT:
             self.vel_y = GRAVITY_FORCE_LIMIT
 
         dy += self.vel_y
         self.in_air = True
 
-        if self.entity_id == 1:
+        dx= round(dx)
+        dy = round(dy)
+        
+        if self.entity_id != 0:
             for tile in world.bounds_tiles_list:
                 # check collision in the x direction
                 if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                     self.direction *= -1
-
+            
         if self.entity_id == 0:
             if self.rect.left + dx < 0 or self.rect.right + dx > (world.level_length * TILE_SIZE):
                 dx = 0
@@ -425,6 +435,10 @@ class Entity(pygame.sprite.Sprite):
 
             for spike in spikes_group:
                 if spike.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height) and not self.invulnerability:
+                    self.hurt()
+            
+            for cloud in clouds_group:
+                if cloud.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height) and not self.invulnerability:
                     self.hurt()
 
         if self.rect.y + dy < 0:
@@ -438,10 +452,13 @@ class Entity(pygame.sprite.Sprite):
                 if abs((self.rect.bottom) - platform.rect.top) <= self.collision_treshold:
                     on_platform = platform
                 if platform.move_x != 0:
-                    dx += platform.direction * platform.speed
+                    dx += platform.direction * platform.speed * tick
+        
+        dx= round(dx)
+        dy = round(dy)
         self.rect, colls, on_platform = move_with_collisions(
             self, tick,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
-
+        
         if colls['bottom'] or colls['bottom-platform']:
             self.vel_y = 0
             self.air_timer = 0
@@ -533,13 +550,16 @@ class Platform(pygame.sprite.Sprite):
 
         self.determine_movement_by_id(self.platform_id)
 
-    def update(self, world):
+    def update(self, world, tick):
         dx = 0
         dy = 0
         if self.move_x:
-            dx = self.direction * self.speed
+            dx = self.direction * self.speed * tick
         if self.move_y:
-            dy = self.direction * self.speed
+            dy = self.direction * self.speed * tick
+        dx = round(dx)
+        dy = round(dy)
+
         for tile in world.bounds_tiles_list:
             # check collision in the x direction
             if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.rect.width, self.rect.height):
@@ -556,7 +576,8 @@ class Platform(pygame.sprite.Sprite):
             elif tile[1].colliderect(self.rect.x, self.rect.y + dy, self.rect.width, self.rect.height):
                 dy *= -1
                 self.direction *= -1
-
+        
+        
         self.rect.x += dx
         self.rect.y += dy
 
@@ -577,22 +598,22 @@ class Platform(pygame.sprite.Sprite):
     def determine_movement_by_id(self, id):
         if id == 0:
             self.direction = 1
-            self.speed = 1
+            self.speed = 60
             self.move_x = 1
             self.move_y = 0
         elif id == 1:
             self.direction = 1
-            self.speed = 1
-            self.move_x = 0
-            self.move_y = 1
+            self.speed = 60
+            self.move_x = 1
+            self.move_y = 0
         elif id == 2:
             self.direction = 1
-            self.speed = 1
+            self.speed = 60
             self.move_x = 1
             self.move_y = 0
         elif id == 3:
             self.direction = 1
-            self.speed = 1
+            self.speed = 60
             self.move_x = 0
             self.move_y = 0
 
@@ -605,7 +626,7 @@ class Item(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
     
     def update(self, target, current_time):
-        if pygame.sprite.collide_rect(self, target):
+        if self.rect.colliderect(target.rect):
             self.action(target, current_time)
             self.kill()
 
@@ -622,6 +643,7 @@ class Item(pygame.sprite.Sprite):
         elif self.item_type == 'Boost':
             target.boosted = True
             target.boost_start_time = current_time
+            target.speed += 200
         
         
 
@@ -697,15 +719,15 @@ class FakePlatform(pygame.sprite.Sprite):
         self.rect.y = y
 
         self.direction = 1
-        self.speed = 1
+        self.speed = 100
         self.move_x = 0
         self.move_y = 0
 
         self.activated = False
 
-    def update(self, world):
+    def update(self, world, tick):
         if self.activated:
-            self.execute_action()
+            self.execute_action(tick)
 
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
@@ -713,9 +735,10 @@ class FakePlatform(pygame.sprite.Sprite):
         pygame.draw.rect(canvas, (255, 0, 0),
                          (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
-    def execute_action(self):
+    def execute_action(self, tick):
         if self.action == 'fall':
-            self.rect.y += self.speed
+            self.rect.y += self.speed *tick
+            # print(f' {self.speed *tick}')
 
 
 class InvisibleBlock(pygame.sprite.Sprite):
@@ -789,6 +812,58 @@ class Checkpoint(pygame.sprite.Sprite):
                                        offset_x), round(self.rect.y - offset_y)))
 
 
+class Wingman(pygame.sprite.Sprite):
+    def __init__(self, x, y, speed):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = wingman_image
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+        self.location = (x, y)
+        self.speed = speed
+
+    def update(self,current_time, tick_in_seconds, world, all_platforms):
+        pass
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))
+    
+    def update_animation(self):
+        ANIMATION_COOLDOWN = 100
+        self.image = self.animation_list[self.action][self.frame_index]
+        if self.local_time - self.update_time > ANIMATION_COOLDOWN:
+            self.update_time = self.local_time
+            self.frame_index += 1
+        if self.frame_index >= len(self.animation_list[self.action]):
+
+            self.frame_index = 0
+
+    def set_action(self, new_action):
+        if new_action != self.action:
+            self.action = new_action
+            self.frame_index = 0
+            self.update_time = self.local_time
+            
+class Cloud(pygame.sprite.Sprite):
+    def __init__(self, img, x, y, speed):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+        self.location = (x, y)
+        self.speed = speed
+
+    def update(self,current_time, tick_in_seconds, world, all_platforms):
+        pass
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))                                                                            
+
+                                       
+                                       
 def game():
     # level
     level = 0
@@ -822,7 +897,7 @@ def game():
         current_time += time_per_frame
         screen.fill((0, 0, 0))
         canvas.fill((0, 0, 0))
-        # print(tick_in_seconds)
+    
         if level_complete:
             world, player, camera, all_platforms, invisible_blocks, level = load_level(
                 level, img_list)
@@ -857,7 +932,7 @@ def game():
         if player.alive:
             # Update methods
             for platform in all_platforms:
-                platform.update(world)
+                platform.update(world, tick_in_seconds)
 
             player.update(current_time, tick_in_seconds,  world, all_platforms)
 

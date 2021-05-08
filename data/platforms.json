@@ -1,0 +1,87 @@
+{
+    "platforms": {
+        "level_1": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 70,
+                "direction": 1
+            },
+            {
+                "id": 1,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 70,
+                "direction": 1
+            },
+            {
+                "id": 2,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            },
+            {
+                "id": 3,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            }
+        ],
+        "level_2": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            },
+            {
+                "id": 1,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            },
+            {
+                "id": 2,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            },
+            {
+                "id": 3,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            }
+        ],
+        "level_3": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            },
+            {
+                "id": 1,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            },
+            {
+                "id": 2,
+                "move_x": 1,
+                "move_y": 0,
+                "speed": 100,
+                "direction": 1
+            }
+        ]
+    }
+}

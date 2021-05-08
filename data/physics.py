@@ -90,7 +90,10 @@ def move_with_collisions(entity,tick, movement, tiles, platforms, sprites, invis
         hit_list = collision_not_tile(entity.rect, sprites)
         for sprite in hit_list:
             if abs((entity.rect.bottom) - sprite.rect.top) <= entity.collision_treshold:
-                sprite.kill()
+                if sprite.entity_id == 2:
+                    entity.hurt()
+                else:
+                    sprite.kill()
             elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold and not entity.invulnerability:
                 entity.hurt()
 

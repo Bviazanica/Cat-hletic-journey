@@ -10,6 +10,7 @@ from enum import IntEnum
 from data.camera.camera import *
 from data.physics import *
 from data.utility import *
+from data.json_reader import *
 vec = pygame.math.Vector2
 
 pygame.init()
@@ -30,21 +31,27 @@ COLS = 200
 TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
 TILE_TYPES = 264
 
+platforms_json_data = platforms_data()
 # font
 font = pygame.font.Font('platformer/data/font/kenney_blocks.ttf', 70)
 
 # scale
 scale = 1
 wingman_image = pygame.image.load(
-    f'platformer/data/images/entities/Wingman/Walk/0.png')
+    f'platformer/data/images/entities/Wingman/Walk/0.png').convert_alpha()
+wingman_image = pygame.transform.scale(
+    wingman_image, (TILE_SIZE, TILE_SIZE))
+
+cloud_image = pygame.image.load(
+    f'platformer/data/images/entities/Cloud/cloud.png').convert_alpha()
 
 button_clicked = pygame.image.load(
-    f'platformer/data/images/interface/button_1.png')
+    f'platformer/data/images/interface/button_1.png').convert_alpha()
 
 fake_platform_green = pygame.image.load(
-    f'platformer/data/images/tiles/68.png')
+    f'platformer/data/images/tiles/68.png').convert_alpha()
 fake_ground_green = pygame.image.load(
-    f'platformer/data/images/tiles/66.png')
+    f'platformer/data/images/tiles/66.png').convert_alpha()
 
 fake_platform_green = pygame.transform.scale(
     fake_platform_green, (TILE_SIZE, TILE_SIZE))
@@ -53,37 +60,37 @@ fake_ground_green = pygame.transform.scale(
 
 
 green_key_image = pygame.image.load(
-    f'platformer/data/images/items/green_key.png')
+    f'platformer/data/images/items/green_key.png').convert_alpha()
 health_image = pygame.image.load(
-    f'platformer/data/images/other/health.png')
+    f'platformer/data/images/other/health.png').convert_alpha()
 health_image = pygame.transform.scale(
     health_image, (int(TILE_SIZE), int(TILE_SIZE)))
 health_image_width = health_image.get_width()
 
 sky_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/sky.png')
+    f'platformer/data/images/backgrounds/level1/sky.png').convert_alpha()
 rocks_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/rocks_1.png')
+    f'platformer/data/images/backgrounds/level1/rocks_1.png').convert_alpha()
 mountain_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/rocks_2.png')
+    f'platformer/data/images/backgrounds/level1/rocks_2.png').convert_alpha()
 clouds1_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_1.png')
+    f'platformer/data/images/backgrounds/level1/clouds_1.png').convert_alpha()
 clouds2_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_2.png')
+    f'platformer/data/images/backgrounds/level1/clouds_2.png').convert_alpha()
 clouds3_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_3.png')
+    f'platformer/data/images/backgrounds/level1/clouds_3.png').convert_alpha()
 clouds4_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_4.png')
+    f'platformer/data/images/backgrounds/level1/clouds_4.png').convert_alpha()
 
 bubble_item_image = pygame.image.load(
-    f'platformer/data/images/tiles/57.png')
+    f'platformer/data/images/tiles/57.png').convert_alpha()
 boost_item_image = pygame.image.load(
-    f'platformer/data/images/tiles/58.png')
+    f'platformer/data/images/tiles/58.png').convert_alpha()
 health_item_image = pygame.image.load(
-    f'platformer/data/images/tiles/59.png')
+    f'platformer/data/images/tiles/59.png').convert_alpha()
 
 bubble_image =  pygame.image.load(
-    f'platformer/data/images/other/bubble.png')
+    f'platformer/data/images/other/bubble.png').convert_alpha()
 
 effect_durations = {
     'Bubble':5000,
@@ -144,9 +151,13 @@ def load_entity_animations(scale):
 
                 for i in range(num_of_frames):
                     img = pygame.image.load(
-                        f'platformer/data/images/entities/{entity_type}/{animation}/{i}.png')
-                    img = pygame.transform.scale(
-                        img, (int(img.get_width() * scale), int(img.get_height() * scale)))
+                        f'platformer/data/images/entities/{entity_type}/{animation}/{i}.png').convert_alpha()
+                    if entity_type == 'Spikeman':
+                        img = pygame.transform.scale(
+                            img, (TILE_SIZE, TILE_SIZE))
+                    else:
+                        img = pygame.transform.scale(
+                            img, (int(img.get_width() * scale), int(img.get_height() * scale)))
                     temp_list.append(img)
                 entity_animations.append(temp_list)
             else:
@@ -239,7 +250,9 @@ class World():
 
                     if tile in (66, 67, 68, 69, 70, 89, 90, 92, 94, 95, 96, 111, 112, 115):
                         self.obstacles_list.append(tile_data)
-
+                    
+                    elif tile == 56:  # create invis tile
+                        self.bounds_tiles_list.append(tile_data)
                     elif tile == 57:
                         new_item = Item(bubble_item_image,'Bubble', x*TILE_SIZE, y*TILE_SIZE)
                         items_group.add(new_item)
@@ -264,12 +277,12 @@ class World():
                             int(len(platform) * TILE_SIZE), int(TILE_SIZE)))
 
                         self.platforms.append(Platform(
-                            platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id))
+                            platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id,level))
                         platform_id += 1
                         platform = []
                     elif tile == 74:
                         self.platforms.append(Platform(
-                            x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id))
+                            x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id, level))
                         platform_id += 1
                     elif tile == 110:
                         if x == 7:
@@ -295,6 +308,10 @@ class World():
                     elif tile in (232, 234, 254, 256):
                         water = Water(img, x * TILE_SIZE, y * TILE_SIZE)
                         water_group.add(water)
+                        if tile == 254 and x == 30 and y == 14:
+                            key = Collectible(
+                            'Key', green_key_image, x * TILE_SIZE, y * TILE_SIZE - 2)
+                            key_group.add(key)
                     elif tile == 238:  # create player
                         player = Entity(0, x * TILE_SIZE,
                                         y * TILE_SIZE, 300)
@@ -306,13 +323,15 @@ class World():
                         new_enemy = Entity(1, x * TILE_SIZE,
                                            y * TILE_SIZE, 100)
                         enemies_group.add(new_enemy)
-                    elif tile == 56:  # create invis tile
-                        self.bounds_tiles_list.append(tile_data)
+                    elif tile == 240:  # create enemy
+                        new_cloud = Cloud(cloud_image, x * TILE_SIZE,
+                                           y * TILE_SIZE)
+                        clouds_group.add(new_cloud)
                     elif tile == 260:
-                        new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE -100, 10)
+                        new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE -100, 100)
                         enemies_group.add(new_spikeman)
                     elif tile == 261:
-                        new_wingman = Wingman( x * TILE_SIZE, y * TILE_SIZE, 200)
+                        new_wingman = Wingman(3,x * TILE_SIZE, y * TILE_SIZE, 200)
                         enemies_group.add(new_wingman)
                     elif tile == 263:
                         new_checkpoint = Checkpoint(
@@ -325,8 +344,8 @@ class World():
         for tile in self.obstacles_list:
             canvas.blit(tile[0], (round(tile[1].x - offset_x),
                                   round(tile[1].y - offset_y), tile[1].width, tile[1].height))
-            pygame.draw.rect(canvas, (255, 0, 0),
-                             (round(tile[1].x - offset_x), round(tile[1].y - offset_y), tile[1].width, tile[1].height), 2)
+            # pygame.draw.rect(canvas, (255, 0, 0),
+            #                  (round(tile[1].x - offset_x), round(tile[1].y - offset_y), tile[1].width, tile[1].height), 2)
             # pygame.draw.rect(canvas, (255, 255, 12),
             #                  (tile[1].x, tile[1].y, tile[1].width, tile[1].height), 2)
 
@@ -386,8 +405,6 @@ class Entity(pygame.sprite.Sprite):
 
     def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
-        if self.entity_id == 2:
-            print(f'{self.rect}')
 
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
             self.invulnerability = False
@@ -410,7 +427,9 @@ class Entity(pygame.sprite.Sprite):
             dx = self.speed * tick
         
         # apply gravity
-        self.vel_y += 1
+        self.vel_y += round(70 * tick)
+        if self.entity_id == 0:
+            pass
         if self.vel_y > GRAVITY_FORCE_LIMIT:
             self.vel_y = GRAVITY_FORCE_LIMIT
 
@@ -492,10 +511,11 @@ class Entity(pygame.sprite.Sprite):
         canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
                                                                               offset_x), int(self.rect.y -
                                                                                              offset_y)))
+        # pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+        #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
         if self.entity_id == 0:
             bubble_rect.center = self.rect.center
-            pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
-                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            
             if self.invulnerability:
                 canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
 
@@ -536,7 +556,7 @@ class PlatformPart(pygame.sprite.Sprite):
 
 
 class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, parts, surface, id):
+    def __init__(self, x, y, parts, surface, id, level):
         pygame.sprite.Sprite.__init__(self)
         self.platform_id = id
         self.parts = parts
@@ -548,7 +568,7 @@ class Platform(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
 
-        self.determine_movement_by_id(self.platform_id)
+        self.move_x, self.move_y, self.speed, self.direction = self.determine_movement_by_id(level)
 
     def update(self, world, tick):
         dx = 0
@@ -585,37 +605,19 @@ class Platform(pygame.sprite.Sprite):
         if self.parts == 1:
             canvas.blit(self.image, (round(self.rect.x -
                                            offset_x), round(self.rect.y - offset_y)))
-            pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
-                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            # pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+                                                #    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
         else:
             for x, part in enumerate(self.parts):
                 self.image.blit(part.image, (x*TILE_SIZE, 0))
             canvas.blit(self.image, (round(self.rect.x -
                                            offset_x), round(self.rect.y - offset_y)))
-            pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
-                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            # pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+                                                #    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
-    def determine_movement_by_id(self, id):
-        if id == 0:
-            self.direction = 1
-            self.speed = 60
-            self.move_x = 1
-            self.move_y = 0
-        elif id == 1:
-            self.direction = 1
-            self.speed = 60
-            self.move_x = 1
-            self.move_y = 0
-        elif id == 2:
-            self.direction = 1
-            self.speed = 60
-            self.move_x = 1
-            self.move_y = 0
-        elif id == 3:
-            self.direction = 1
-            self.speed = 60
-            self.move_x = 0
-            self.move_y = 0
+    def determine_movement_by_id(self,level):
+        data = platforms_json_data[f'level_{level}'][self.platform_id]
+        return data['move_x'],data['move_y'],data['speed'],data['direction']
 
 class Item(pygame.sprite.Sprite):
     def __init__(self, image, item_type, x, y):
@@ -645,8 +647,6 @@ class Item(pygame.sprite.Sprite):
             target.boost_start_time = current_time
             target.speed += 200
         
-        
-
 
 class Decoration(pygame.sprite.Sprite):
     def __init__(self, img, x, y):
@@ -690,8 +690,8 @@ class Collectible(pygame.sprite.Sprite):
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, (255, 0, 0),
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, (255, 0, 0),
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
     def collect(self, player):
         if pygame.sprite.collide_rect(self, player):
@@ -732,8 +732,8 @@ class FakePlatform(pygame.sprite.Sprite):
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, (255, 0, 0),
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, (255, 0, 0),
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
     def execute_action(self, tick):
         if self.action == 'fall':
@@ -755,8 +755,8 @@ class InvisibleBlock(pygame.sprite.Sprite):
         if self.visible:
             canvas.blit(self.image, (round(self.rect.x -
                                            offset_x), round(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, (255, 0, 0),
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, (255, 0, 0),
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 
 class Exit(pygame.sprite.Sprite):
@@ -813,7 +813,8 @@ class Checkpoint(pygame.sprite.Sprite):
 
 
 class Wingman(pygame.sprite.Sprite):
-    def __init__(self, x, y, speed):
+    def __init__(self,id, x, y, speed):
+        self.entity_id = id
         pygame.sprite.Sprite.__init__(self)
         self.image = wingman_image
         self.rect = self.image.get_rect()
@@ -846,7 +847,7 @@ class Wingman(pygame.sprite.Sprite):
             self.update_time = self.local_time
             
 class Cloud(pygame.sprite.Sprite):
-    def __init__(self, img, x, y, speed):
+    def __init__(self, img, x, y):
         pygame.sprite.Sprite.__init__(self)
         self.image = img
         self.rect = self.image.get_rect()
@@ -854,15 +855,13 @@ class Cloud(pygame.sprite.Sprite):
                             (TILE_SIZE - self.image.get_height()))
 
         self.location = (x, y)
-        self.speed = speed
 
-    def update(self,current_time, tick_in_seconds, world, all_platforms):
-        pass
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))                                                                            
+        pygame.draw.rect(canvas, (255, 0, 0),
+                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
-                                       
                                        
 def game():
     # level
@@ -877,7 +876,7 @@ def game():
     # store tiles in a list
     img_list = []
     for x in range(TILE_TYPES):
-        img = pygame.image.load(f'platformer/data/images/tiles/{x}.png')
+        img = pygame.image.load(f'platformer/data/images/tiles/{x}.png').convert_alpha()
         if x == 210 or x == 210:
             img = pygame.transform.scale(img, (TILE_SIZE, round(
                 TILE_SIZE/(img.get_width()/img.get_height()))))
@@ -897,7 +896,6 @@ def game():
         current_time += time_per_frame
         screen.fill((0, 0, 0))
         canvas.fill((0, 0, 0))
-    
         if level_complete:
             world, player, camera, all_platforms, invisible_blocks, level = load_level(
                 level, img_list)
@@ -917,7 +915,10 @@ def game():
                     player.moving_right = True
                 if event.key == pygame.K_w and player.alive:
                     if player.air_timer < 10:
-                        player.vel_y = -20
+                        jump_vel = round(-1800 * tick_in_seconds)
+                        if jump_vel < -20:
+                            jump_vel = -20
+                        player.vel_y = jump_vel
                         player.jump = True
 
             # keyboard button released
@@ -930,6 +931,7 @@ def game():
                     player.jump = False
 
         if player.alive:
+            
             # Update methods
             for platform in all_platforms:
                 platform.update(world, tick_in_seconds)
@@ -964,12 +966,9 @@ def game():
             camera.scroll()
             offset_x, offset_y = camera.offset.x, camera.offset.y
             # Draw methods
-            draw_background(canvas, offset_x, offset_y)
+            # draw_background(canvas, offset_x, offset_y)
 
             world.draw(canvas, offset_x, offset_y)
-            for item in items_group:
-                item.draw(canvas, offset_x, offset_y)
-
             for spike in spikes_group:
                 spike.draw(canvas, offset_x, offset_y)
 
@@ -982,10 +981,6 @@ def game():
             for block in invisible_blocks:
                 block.draw(canvas, offset_x, offset_y)
 
-            for key in key_group:
-                key.collect(player)
-                key.draw(canvas, offset_x, offset_y)
-
             for enemy in enemies_group:
                 enemy.draw(canvas, offset_x, offset_y)
 
@@ -996,6 +991,16 @@ def game():
                 water.collide_water(player)
                 water.draw(canvas, offset_x, offset_y)
 
+            for key in key_group:
+                key.collect(player)
+                key.draw(canvas, offset_x, offset_y)
+            
+            for item in items_group:
+                item.draw(canvas, offset_x, offset_y)
+            
+            for cloud in clouds_group:
+                cloud.draw(canvas, offset_x, offset_y)
+
             player.draw(canvas, offset_x, offset_y)
             player.draw_keys(canvas)
             player.draw_health(canvas)
@@ -1004,7 +1009,7 @@ def game():
                                                                                            level, img_list)
 
         screen.blit(canvas, (0, 0))
-        pygame.display.update()
+        pygame.display.flip()
 
 
 def game_over_menu(player, level, img_list):

@@ -219,7 +219,6 @@ def load_level(level, img_list):
 
     return world, player, camera, all_platforms, invisible_blocks, level
 
-
 class Animation_type(IntEnum):
     Death = 0,
     Fall = 1,
@@ -228,6 +227,9 @@ class Animation_type(IntEnum):
     Roll = 4,
     Use = 5,
     Walk = 6,
+    Attack = 7,
+    Appear = 8,
+    Disappear = 9
 
 
 class World():
@@ -420,10 +422,12 @@ class Entity(pygame.sprite.Sprite):
 
     def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
-
+        if self.entity_id == 0:
+            print(self.speed)
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
             self.invulnerability = False
         if self.boosted and self.local_time - self.boost_start_time > effect_durations['Boost']:
+            self.speed = 300
             self.boosted = False
         
         if self.entity_id == 0:
@@ -522,10 +526,16 @@ class Entity(pygame.sprite.Sprite):
         else:
             self.alive = False
     
-    def use(self, possible_use_item_list):
+    def use(self, possible_use_item_list, snakes_group):
         for item in possible_use_item_list:
             if self.rect.colliderect(item.rect):
-                item.action()
+                if item.lever_type == 'green':
+                    if item.activated:
+                        item.action(snakes_group, 'Appear')
+                    else:
+                        item.action(snakes_group, 'Disappear')
+                elif item.lever_type == 'red':
+                    pass
                 break
             
     def draw(self, canvas, offset_x, offset_y):
@@ -666,7 +676,7 @@ class Item(pygame.sprite.Sprite):
         elif self.item_type == 'Boost':
             target.boosted = True
             target.boost_start_time = current_time
-            target.speed += 200
+            target.speed += 100
         
 
 class Decoration(pygame.sprite.Sprite):
@@ -828,37 +838,44 @@ class Snake(pygame.sprite.Sprite):
 
         self.update_time = 0
         self.local_time = 0
+
     def update(self,current_time, tick_in_seconds, world, all_platforms):
         self.local_time = current_time
-        self.update_animation()
-        if self.new_state:
-            if self.state == self.states['Idle']:
-                self.set_action(2)
-            elif self.state == self.states['Appear']:
-                self.set_action(8)
-            elif self.state == self.states['Disappear']:
-                self.set_action(9)
-            elif self.state == self.states['Attack']:
-                self.set_action(7)
+        if self.active:
+            if self.new_state:
+                if self.state == self.states['Idle']:
+                    self.set_action(int(Animation_type.Idle))
+                elif self.state == self.states['Appear']:
+                    self.set_action(int(Animation_type.Appear))
+                elif self.state == self.states['Disappear']:
+                    self.set_action(int(Animation_type.Disappear))
+                elif self.state == self.states['Attack']:
+                    self.set_action(int(Animation_type.Attack))
+            self.update_animation()
 
 
     def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, (255, 0, 0),
-                        (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        if self.active:
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
+            pygame.draw.rect(canvas, (255, 0, 0),
+                            (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
-    
 
     def update_animation(self):
-        ANIMATION_COOLDOWN = 100
+        ANIMATION_COOLDOWN = 70
         self.image = self.animation_list[self.action][self.frame_index]
         if self.local_time - self.update_time > ANIMATION_COOLDOWN:
             self.update_time = self.local_time
             self.frame_index += 1
         if self.frame_index >= len(self.animation_list[self.action]):
-
-            self.frame_index = 0
+            if self.action == int(Animation_type.Disappear):
+                self.active = False
+            elif self.action == int(Animation_type.Appear):
+                self.state = self.states['Idle']
+                self.new_state = True
+            else:
+                self.frame_index = 0
 
     def set_action(self, new_action):
         if new_action != self.action:
@@ -947,6 +964,8 @@ class Cloud(pygame.sprite.Sprite):
 class Lever(pygame.sprite.Sprite):
     def __init__(self, x, y,lever_color):
         pygame.sprite.Sprite.__init__(self)
+
+        self.lever_type = lever_color
         self.images_list = []
         for i in range(3):
             print(i)
@@ -959,18 +978,21 @@ class Lever(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-        self.location = (x,y)
+        self.location = self.rect.midtop
 
         self.activated = False
         self.new_state = False
+        
     def update(self):
         if self.new_state:
             if self.activated:
+                self.reset_to_default()
                 location = self.rect.bottomleft
                 self.image = self.images_list[2]
                 self.rect = self.image.get_rect()
                 self.rect.bottomleft = location
             else:
+                self.reset_to_default()
                 location = self.rect.bottomright
                 self.image = self.images_list[0]
                 self.rect = self.image.get_rect()
@@ -982,9 +1004,19 @@ class Lever(pygame.sprite.Sprite):
         pygame.draw.rect(canvas, (255, 0, 0),
                          (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
-    def action(self):
-        pass   
-        #do action on use
+    def reset_to_default(self):
+        self.image = self.images_list[1]
+        self.rect = self.image.get_rect()
+        self.rect.midtop = self.location
+
+    def action(self,group, state):
+        self.new_state = True
+        self.activated = not self.activated
+
+        for member in group:
+            member.state = member.states[state]
+            member.new_state = True
+            member.active = True
                                 
 def game():
     # level
@@ -1055,7 +1087,7 @@ def game():
                 if event.key == pygame.K_w:
                     player.jump = False
                 if event.key == pygame.K_e:
-                    player.use()
+                    player.use(levers_group, snakes_group)
         if player.alive:
             
             # Update methods

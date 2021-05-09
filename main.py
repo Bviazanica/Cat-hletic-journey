@@ -128,14 +128,16 @@ fake_platforms_group = pygame.sprite.Group()
 items_group = pygame.sprite.Group()
 clouds_group = pygame.sprite.Group()
 wingmans_group = pygame.sprite.Group()
+levers_group = pygame.sprite.Group()
+snakes_group = pygame.sprite.Group()
 
 def draw_background(canvas, offset_x, offset_y):
     canvas.blit(sky_background_image, (0, 0))
 
 # load all images & animations
 def load_entity_animations(scale):
-    animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Roll', 'Use', 'Walk']
-    entity_types = ['Player', 'Runner', 'Spikeman']
+    animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Roll', 'Use', 'Walk', 'Attack', 'Appear', 'Disappear']
+    entity_types = ['Player', 'Runner', 'Spikeman', 'Wingman','Snake']
 
     list_of_loaded_animations = []
     for entity_type in entity_types:
@@ -152,9 +154,10 @@ def load_entity_animations(scale):
                 for i in range(num_of_frames):
                     img = pygame.image.load(
                         f'platformer/data/images/entities/{entity_type}/{animation}/{i}.png').convert_alpha()
-                    if entity_type == 'Spikeman':
+                    if entity_type == 'Spikeman' or entity_type == 'Snake':
                         img = pygame.transform.scale(
                             img, (TILE_SIZE, TILE_SIZE))
+                    
                     else:
                         img = pygame.transform.scale(
                             img, (int(img.get_width() * scale), int(img.get_height() * scale)))
@@ -188,7 +191,9 @@ def reset_level():
     fake_platforms_group.empty()
     items_group.empty()
     clouds_group.empty()
+    snakes_group.empty()
     wingmans_group.empty()
+    levers_group.empty()
     # create empty tile list
     data = []
     for row in range(ROWS):
@@ -305,6 +310,12 @@ class World():
                     elif tile == 210 or tile == 211:
                         new_spike = Spike(img, x * TILE_SIZE, y * TILE_SIZE)
                         spikes_group.add(new_spike)
+                    elif tile == 230:
+                        lever = Lever(x * TILE_SIZE, y * TILE_SIZE, 'green')
+                        levers_group.add(lever)
+                    elif tile == 252:
+                        lever = Lever(x * TILE_SIZE, y * TILE_SIZE, 'red')
+                        levers_group.add(lever)
                     elif tile in (232, 234, 254, 256):
                         water = Water(img, x * TILE_SIZE, y * TILE_SIZE)
                         water_group.add(water)
@@ -327,6 +338,10 @@ class World():
                         new_cloud = Cloud(cloud_image, x * TILE_SIZE,
                                            y * TILE_SIZE)
                         clouds_group.add(new_cloud)
+                    elif tile == 258:  # create enemy
+                        new_snake = Snake(4, x * TILE_SIZE,
+                                           y * TILE_SIZE)
+                        snakes_group.add(new_snake)
                     elif tile == 260:
                         new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE -100, 100)
                         enemies_group.add(new_spikeman)
@@ -506,7 +521,13 @@ class Entity(pygame.sprite.Sprite):
             self.reset_position(self.checkpoint_position)
         else:
             self.alive = False
-
+    
+    def use(self, possible_use_item_list):
+        for item in possible_use_item_list:
+            if self.rect.colliderect(item.rect):
+                item.action()
+                break
+            
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
                                                                               offset_x), int(self.rect.y -
@@ -784,6 +805,67 @@ class Spike(pygame.sprite.Sprite):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
 
+class Snake(pygame.sprite.Sprite):
+    def __init__(self,id, x, y, ):
+        pygame.sprite.Sprite.__init__(self)
+        self.entity_id = id
+
+        self.animation_list = animations_list[self.entity_id]
+        self.frame_index = 0
+        self.action = 2
+
+        self.active = True
+
+        self.image = self.animation_list[self.action][self.frame_index]
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x, y)
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+
+        self.states = {'Idle':'Idle', 'Appear':'Appear', 'Disappear':'Disappear', 'Attack':'Attack'}
+        self.state = self.states['Attack']
+        self.new_state = False
+
+        self.update_time = 0
+        self.local_time = 0
+    def update(self,current_time, tick_in_seconds, world, all_platforms):
+        self.local_time = current_time
+        self.update_animation()
+        if self.new_state:
+            if self.state == self.states['Idle']:
+                self.set_action(2)
+            elif self.state == self.states['Appear']:
+                self.set_action(8)
+            elif self.state == self.states['Disappear']:
+                self.set_action(9)
+            elif self.state == self.states['Attack']:
+                self.set_action(7)
+
+
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))
+        pygame.draw.rect(canvas, (255, 0, 0),
+                        (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+
+    
+
+    def update_animation(self):
+        ANIMATION_COOLDOWN = 100
+        self.image = self.animation_list[self.action][self.frame_index]
+        if self.local_time - self.update_time > ANIMATION_COOLDOWN:
+            self.update_time = self.local_time
+            self.frame_index += 1
+        if self.frame_index >= len(self.animation_list[self.action]):
+
+            self.frame_index = 0
+
+    def set_action(self, new_action):
+        if new_action != self.action:
+            self.action = new_action
+            self.frame_index = 0
+            self.update_time = self.local_time
+
 
 class Checkpoint(pygame.sprite.Sprite):
     def __init__(self, img, x, y):
@@ -862,7 +944,48 @@ class Cloud(pygame.sprite.Sprite):
         pygame.draw.rect(canvas, (255, 0, 0),
                          (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
-                                       
+class Lever(pygame.sprite.Sprite):
+    def __init__(self, x, y,lever_color):
+        pygame.sprite.Sprite.__init__(self)
+        self.images_list = []
+        for i in range(3):
+            print(i)
+            img = pygame.image.load(
+                        f'platformer/data/images/items/lever/{lever_color}_lever_{i}.png').convert_alpha()
+            self.images_list.append(img)
+        self.image = self.images_list[1]
+
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+        self.location = (x,y)
+
+        self.activated = False
+        self.new_state = False
+    def update(self):
+        if self.new_state:
+            if self.activated:
+                location = self.rect.bottomleft
+                self.image = self.images_list[2]
+                self.rect = self.image.get_rect()
+                self.rect.bottomleft = location
+            else:
+                location = self.rect.bottomright
+                self.image = self.images_list[0]
+                self.rect = self.image.get_rect()
+                self.rect.bottomright = location
+            
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))                                                                            
+        pygame.draw.rect(canvas, (255, 0, 0),
+                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+
+    def action(self):
+        pass   
+        #do action on use
+                                
 def game():
     # level
     level = 0
@@ -877,9 +1000,11 @@ def game():
     img_list = []
     for x in range(TILE_TYPES):
         img = pygame.image.load(f'platformer/data/images/tiles/{x}.png').convert_alpha()
-        if x == 210 or x == 210:
+        if x == 210 or x == 211:
             img = pygame.transform.scale(img, (TILE_SIZE, round(
                 TILE_SIZE/(img.get_width()/img.get_height()))))
+        elif x in (229,230,231):
+            img = pygame.transform.scale(img, (img.get_width(), img.get_height()))
         elif not x == 101:
             img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
         img_list.append(img)
@@ -929,7 +1054,8 @@ def game():
                     player.moving_right = False
                 if event.key == pygame.K_w:
                     player.jump = False
-
+                if event.key == pygame.K_e:
+                    player.use()
         if player.alive:
             
             # Update methods
@@ -941,8 +1067,14 @@ def game():
             for enemy in enemies_group:
                 enemy.update(current_time, tick_in_seconds, world, all_platforms)
 
+            for snake in snakes_group:
+                snake.update(current_time, tick_in_seconds, world, all_platforms)
+
             for checkpoint in checkpoints_group:
                 checkpoint.update(player)
+
+            for lever in levers_group:
+                lever.update()
 
             for item in items_group:
                 item.update(player,current_time)
@@ -995,6 +1127,12 @@ def game():
                 key.collect(player)
                 key.draw(canvas, offset_x, offset_y)
             
+            for snake in snakes_group:
+                snake.draw(canvas,offset_x, offset_y)
+
+            for lever in levers_group:
+                lever.draw(canvas,offset_x, offset_y)
+
             for item in items_group:
                 item.draw(canvas, offset_x, offset_y)
             

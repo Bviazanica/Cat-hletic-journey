@@ -136,8 +136,8 @@ def draw_background(canvas, offset_x, offset_y):
 
 # load all images & animations
 def load_entity_animations(scale):
-    animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Roll', 'Use', 'Walk', 'Attack', 'Appear', 'Disappear']
-    entity_types = ['Player', 'Runner', 'Spikeman', 'Wingman','Snake']
+    animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Run', 'Slide', 'Walk', 'Attack', 'Appear', 'Disappear']
+    entity_types = ['Player', 'Green_enemy', 'Spikeman', 'Wingman','Snake']
 
     list_of_loaded_animations = []
     for entity_type in entity_types:
@@ -155,9 +155,11 @@ def load_entity_animations(scale):
                     img = pygame.image.load(
                         f'platformer/data/images/entities/{entity_type}/{animation}/{i}.png').convert_alpha()
                     if entity_type == 'Spikeman' or entity_type == 'Snake':
-                        img = pygame.transform.scale(
+                        img = pygame.transform.smoothscale(
                             img, (TILE_SIZE, TILE_SIZE))
-                    
+                    elif entity_type == 'Player':
+                        img = pygame.transform.smoothscale(
+                            img, (TILE_SIZE*2, TILE_SIZE*2))
                     else:
                         img = pygame.transform.scale(
                             img, (int(img.get_width() * scale), int(img.get_height() * scale)))
@@ -224,8 +226,8 @@ class Animation_type(IntEnum):
     Fall = 1,
     Idle = 2,
     Jump = 3,
-    Roll = 4,
-    Use = 5,
+    Run = 4,
+    Slide = 5,
     Walk = 6,
     Attack = 7,
     Appear = 8,
@@ -407,6 +409,8 @@ class Entity(pygame.sprite.Sprite):
         # rect properties
         if self.entity_id ==2:
             self.action = 6
+        elif self.entity_id == 0:
+            self.action = int(Animation_type.Idle)
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
@@ -420,10 +424,16 @@ class Entity(pygame.sprite.Sprite):
         elif self.entity_id != 0:
             self.health_points = 1
 
+        self.new_state = False
+        # self.states = {'Death':'Death','Fall': 'Fall', 'Idle':'Idle', 'Jump':'Jump','Run':'Run','Slide':'Slide','Walk':'Walk'}
+
+        # self.state = self.states['Idle']
+
     def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
+
         if self.entity_id == 0:
-            print(self.speed)
+            pass
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
             self.invulnerability = False
         if self.boosted and self.local_time - self.boost_start_time > effect_durations['Boost']:
@@ -432,9 +442,15 @@ class Entity(pygame.sprite.Sprite):
         
         if self.entity_id == 0:
             self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
+            self.flip = True if self.direction < 0 else False
+
         elif self.entity_id != 0:
+            self.set_action(int(Animation_type.Walk))
             self.determine_movement()
             self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
+    
+
+        self.update_animation()
 
     def move(self, moving_left, moving_right, world, all_platforms,tick):
         dx = 0
@@ -446,7 +462,7 @@ class Entity(pygame.sprite.Sprite):
             dx = self.speed * tick
         
         # apply gravity
-        self.vel_y += round(70 * tick)
+        self.vel_y += round(40 * tick)
         if self.entity_id == 0:
             pass
         if self.vel_y > GRAVITY_FORCE_LIMIT:
@@ -511,8 +527,10 @@ class Entity(pygame.sprite.Sprite):
     def determine_movement(self):
         if self.direction == 1:
             self.moving_right = True
+            self.flip = False
         else:
             self.moving_right = False
+            self.flip = True
         self.moving_left = not self.moving_right
         
     def reset_position(self, position):
@@ -542,8 +560,8 @@ class Entity(pygame.sprite.Sprite):
         canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
                                                                               offset_x), int(self.rect.y -
                                                                                              offset_y)))
-        # pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
-        #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
+        pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
         if self.entity_id == 0:
             bubble_rect.center = self.rect.center
             
@@ -566,8 +584,8 @@ class Entity(pygame.sprite.Sprite):
         if self.local_time - self.update_time > ANIMATION_COOLDOWN:
             self.update_time = self.local_time
             self.frame_index += 1
-        if self.frame_index >= len(self.animation_list[self.action]):
 
+        if self.frame_index >= len(self.animation_list[self.action]):
             self.frame_index = 0
 
     def set_action(self, new_action):
@@ -863,7 +881,7 @@ class Snake(pygame.sprite.Sprite):
 
 
     def update_animation(self):
-        ANIMATION_COOLDOWN = 70
+        ANIMATION_COOLDOWN = 50
         self.image = self.animation_list[self.action][self.frame_index]
         if self.local_time - self.update_time > ANIMATION_COOLDOWN:
             self.update_time = self.local_time
@@ -968,7 +986,6 @@ class Lever(pygame.sprite.Sprite):
         self.lever_type = lever_color
         self.images_list = []
         for i in range(3):
-            print(i)
             img = pygame.image.load(
                         f'platformer/data/images/items/lever/{lever_color}_lever_{i}.png').convert_alpha()
             self.images_list.append(img)
@@ -1057,7 +1074,6 @@ def game():
             world, player, camera, all_platforms, invisible_blocks, level = load_level(
                 level, img_list)
             level_complete = False
-
         # User input
         for event in pygame.event.get():
             # quit game
@@ -1068,16 +1084,23 @@ def game():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_a:
                     player.moving_left = True
+                    player.set_action(int(Animation_type.Run))
+                    player.direction = -1
                 if event.key == pygame.K_d:
+                    player.direction = 1
                     player.moving_right = True
+                    player.set_action(int(Animation_type.Run))
                 if event.key == pygame.K_w and player.alive:
                     if player.air_timer < 10:
+                        player.set_action(int(Animation_type.Jump))
                         jump_vel = round(-1800 * tick_in_seconds)
                         if jump_vel < -20:
                             jump_vel = -20
                         player.vel_y = jump_vel
                         player.jump = True
+                        player.in_air = True
 
+           
             # keyboard button released
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_a:
@@ -1088,8 +1111,12 @@ def game():
                     player.jump = False
                 if event.key == pygame.K_e:
                     player.use(levers_group, snakes_group)
-        if player.alive:
+
             
+        if (not player.moving_left and not player.moving_right and player.in_air == False):
+            player.set_action(int(Animation_type.Idle))
+        
+        if player.alive:
             # Update methods
             for platform in all_platforms:
                 platform.update(world, tick_in_seconds)
@@ -1130,7 +1157,7 @@ def game():
             camera.scroll()
             offset_x, offset_y = camera.offset.x, camera.offset.y
             # Draw methods
-            # draw_background(canvas, offset_x, offset_y)
+            draw_background(canvas, offset_x, offset_y)
 
             world.draw(canvas, offset_x, offset_y)
             for spike in spikes_group:

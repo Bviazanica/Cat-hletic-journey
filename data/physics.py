@@ -30,8 +30,7 @@ def move_with_collisions(entity,tick, movement, tiles, platforms, sprites, invis
         elif movement[0] < 0:
             entity.rect.left = tile.right
             collision_types['left'] = True
-        if entity.entity_id != 0:
-            entity.direction *= -1
+            
 
     # x collision for platforms
     hit_list = collision_not_tile(entity.rect, platforms)

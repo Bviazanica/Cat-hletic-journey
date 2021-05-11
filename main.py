@@ -24,7 +24,7 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
 # define game variables
-GRAVITY = 1
+GRAVITY = 50
 GRAVITY_FORCE_LIMIT = 15
 ROWS = 15
 COLS = 200
@@ -157,7 +157,7 @@ def load_entity_animations(scale):
                     if entity_type == 'Spikeman' or entity_type == 'Snake':
                         img = pygame.transform.smoothscale(
                             img, (TILE_SIZE, TILE_SIZE))
-                    elif entity_type == 'Player':
+                    elif entity_type == 'Player' :
                         img = pygame.transform.smoothscale(
                             img, (TILE_SIZE*2, TILE_SIZE*2))
                     else:
@@ -336,7 +336,7 @@ class World():
                         camera.setmethod(camera_type)
                     elif tile == 239:  # create enemy
                         new_enemy = Entity(1, x * TILE_SIZE,
-                                           y * TILE_SIZE, 100)
+                                           y * TILE_SIZE, 150)
                         enemies_group.add(new_enemy)
                     elif tile == 240:  # create enemy
                         new_cloud = Cloud(cloud_image, x * TILE_SIZE,
@@ -407,10 +407,13 @@ class Entity(pygame.sprite.Sprite):
         self.boost_start_time = 0
         
         # rect properties
-        if self.entity_id ==2:
-            self.action = 6
-        elif self.entity_id == 0:
+        if self.entity_id == 0:
             self.action = int(Animation_type.Idle)
+        elif self.entity_id == 1:
+            self.action = int(Animation_type.Walk)
+        elif self.entity_id == 2:
+            self.action = int(Animation_type.Run)
+
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
@@ -424,16 +427,18 @@ class Entity(pygame.sprite.Sprite):
         elif self.entity_id != 0:
             self.health_points = 1
 
+       
         self.new_state = False
         # self.states = {'Death':'Death','Fall': 'Fall', 'Idle':'Idle', 'Jump':'Jump','Run':'Run','Slide':'Slide','Walk':'Walk'}
 
         # self.state = self.states['Idle']
 
+        self.on_platform = False
+        self.was_on_platform = False
+
     def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
 
-        if self.entity_id == 0:
-            pass
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
             self.invulnerability = False
         if self.boosted and self.local_time - self.boost_start_time > effect_durations['Boost']:
@@ -448,7 +453,9 @@ class Entity(pygame.sprite.Sprite):
             self.set_action(int(Animation_type.Walk))
             self.determine_movement()
             self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
-    
+
+        if self.air_timer > 0 and self.was_on_platform:
+            self.vel_y = 1
 
         self.update_animation()
 
@@ -456,15 +463,15 @@ class Entity(pygame.sprite.Sprite):
         dx = 0
         dy = 0
 
+        self.was_on_platform = self.on_platform
+
         if moving_left:
             dx = -self.speed * tick
         if moving_right:
             dx = self.speed * tick
         
         # apply gravity
-        self.vel_y += round(40 * tick)
-        if self.entity_id == 0:
-            pass
+        self.vel_y += round(GRAVITY * tick)
         if self.vel_y > GRAVITY_FORCE_LIMIT:
             self.vel_y = GRAVITY_FORCE_LIMIT
 
@@ -479,6 +486,8 @@ class Entity(pygame.sprite.Sprite):
                 # check collision in the x direction
                 if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                     self.direction *= -1
+                    print(self.rect.x + dx)
+                    
             
         if self.entity_id == 0:
             if self.rect.left + dx < 0 or self.rect.right + dx > (world.level_length * TILE_SIZE):
@@ -494,7 +503,7 @@ class Entity(pygame.sprite.Sprite):
             for cloud in clouds_group:
                 if cloud.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height) and not self.invulnerability:
                     self.hurt()
-
+            
         if self.rect.y + dy < 0:
             dy = 0
             self.vel_y = 0
@@ -514,13 +523,22 @@ class Entity(pygame.sprite.Sprite):
             self, tick,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
         
         if colls['bottom'] or colls['bottom-platform']:
-            self.vel_y = 0
             self.air_timer = 0
             self.in_air = False
             dy = 0
+            self.on_platform = True
+            self.jump = False
         else:
             self.air_timer += 1
+            self.on_platform = False
+            
+        if self.entity_id != 0:
+            if colls['right'] or colls['left']:
+                self.direction *= -1
 
+        if not self.on_platform and self.air_timer > 0 and self.was_on_platform and not self.jump:
+            self.vel_y = 1
+            self.was_on_platform = False
         if colls['top']:
             self.vel_y = 0
 
@@ -557,8 +575,8 @@ class Entity(pygame.sprite.Sprite):
                 break
             
     def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(pygame.transform.flip(self.image, self.flip, False), (int(self.rect.x -
-                                                                              offset_x), int(self.rect.y -
+        canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                              offset_x), round(self.rect.y -
                                                                                              offset_y)))
         pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
                                                    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
@@ -768,7 +786,7 @@ class FakePlatform(pygame.sprite.Sprite):
         self.rect.y = y
 
         self.direction = 1
-        self.speed = 100
+        self.speed = 200
         self.move_x = 0
         self.move_y = 0
 
@@ -786,8 +804,7 @@ class FakePlatform(pygame.sprite.Sprite):
 
     def execute_action(self, tick):
         if self.action == 'fall':
-            self.rect.y += self.speed *tick
-            # print(f' {self.speed *tick}')
+            self.rect.y += round(self.speed *tick)
 
 
 class InvisibleBlock(pygame.sprite.Sprite):
@@ -834,7 +851,7 @@ class Spike(pygame.sprite.Sprite):
                                        offset_x), round(self.rect.y - offset_y)))
 
 class Snake(pygame.sprite.Sprite):
-    def __init__(self,id, x, y, ):
+    def __init__(self,id, x, y ):
         pygame.sprite.Sprite.__init__(self)
         self.entity_id = id
 
@@ -857,12 +874,19 @@ class Snake(pygame.sprite.Sprite):
         self.update_time = 0
         self.local_time = 0
 
-    def update(self,current_time, tick_in_seconds, world, all_platforms):
+    def update(self,current_time, tick_in_seconds, world, all_platforms, player):
         self.local_time = current_time
+        if is_close(self.rect, player.rect, 50):
+            self.state = self.states['Attack']
+            self.new_state = True
+
+        self.flip = True if player.rect.center > self.rect.center else False
+    
         if self.active:
             if self.new_state:
                 if self.state == self.states['Idle']:
                     self.set_action(int(Animation_type.Idle))
+                    self.new_state = True
                 elif self.state == self.states['Appear']:
                     self.set_action(int(Animation_type.Appear))
                 elif self.state == self.states['Disappear']:
@@ -874,14 +898,15 @@ class Snake(pygame.sprite.Sprite):
 
     def draw(self, canvas, offset_x, offset_y):
         if self.active:
-            canvas.blit(self.image, (round(self.rect.x -
-                                        offset_x), round(self.rect.y - offset_y)))
+            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                              offset_x), round(self.rect.y -
+                                                                                             offset_y)))
             pygame.draw.rect(canvas, (255, 0, 0),
                             (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 
     def update_animation(self):
-        ANIMATION_COOLDOWN = 50
+        ANIMATION_COOLDOWN = 80
         self.image = self.animation_list[self.action][self.frame_index]
         if self.local_time - self.update_time > ANIMATION_COOLDOWN:
             self.update_time = self.local_time
@@ -892,6 +917,10 @@ class Snake(pygame.sprite.Sprite):
             elif self.action == int(Animation_type.Appear):
                 self.state = self.states['Idle']
                 self.new_state = True
+            elif self.action == int(Animation_type.Attack):
+                self.new_state = True
+                self.state = self.states['Idle']
+                self.frame_index = 0
             else:
                 self.frame_index = 0
 
@@ -1074,6 +1103,9 @@ def game():
             world, player, camera, all_platforms, invisible_blocks, level = load_level(
                 level, img_list)
             level_complete = False
+        
+        if tick_in_seconds > 0.3:
+            tick_in_seconds = 0.2
         # User input
         for event in pygame.event.get():
             # quit game
@@ -1084,21 +1116,18 @@ def game():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_a:
                     player.moving_left = True
-                    player.set_action(int(Animation_type.Run))
                     player.direction = -1
                 if event.key == pygame.K_d:
                     player.direction = 1
                     player.moving_right = True
-                    player.set_action(int(Animation_type.Run))
                 if event.key == pygame.K_w and player.alive:
                     if player.air_timer < 10:
-                        player.set_action(int(Animation_type.Jump))
                         jump_vel = round(-1800 * tick_in_seconds)
                         if jump_vel < -20:
                             jump_vel = -20
                         player.vel_y = jump_vel
                         player.jump = True
-                        player.in_air = True
+                        player.on_platform = False
 
            
             # keyboard button released
@@ -1108,12 +1137,15 @@ def game():
                 if event.key == pygame.K_d:
                     player.moving_right = False
                 if event.key == pygame.K_w:
-                    player.jump = False
+                    pass
                 if event.key == pygame.K_e:
                     player.use(levers_group, snakes_group)
 
-            
-        if (not player.moving_left and not player.moving_right and player.in_air == False):
+        if player.in_air:
+            player.set_action(int(Animation_type.Jump))
+        elif player.moving_left or player.moving_right:
+            player.set_action(int(Animation_type.Run))
+        else:
             player.set_action(int(Animation_type.Idle))
         
         if player.alive:
@@ -1127,7 +1159,7 @@ def game():
                 enemy.update(current_time, tick_in_seconds, world, all_platforms)
 
             for snake in snakes_group:
-                snake.update(current_time, tick_in_seconds, world, all_platforms)
+                snake.update(current_time, tick_in_seconds, world, all_platforms, player)
 
             for checkpoint in checkpoints_group:
                 checkpoint.update(player)
@@ -1157,7 +1189,7 @@ def game():
             camera.scroll()
             offset_x, offset_y = camera.offset.x, camera.offset.y
             # Draw methods
-            draw_background(canvas, offset_x, offset_y)
+            # draw_background(canvas, offset_x, offset_y)
 
             world.draw(canvas, offset_x, offset_y)
             for spike in spikes_group:

@@ -1,3 +1,5 @@
+import math
+
 def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, platform_image):
     for x in range(width):
         for y in range(height):
@@ -14,7 +16,5 @@ def draw_text(text, font, color, surface, x, y):
     textrect.midtop = (x, y)
     surface.blit(textobj, textrect)
 
-def set_state(group, state):
-    for member in group:
-        member.new_state = True
-        member.state = state
+def is_close(object1, object2, distance):
+    return math.hypot(object2.centerx-object1.centerx, object2.centery-object1.centery) < float(distance)

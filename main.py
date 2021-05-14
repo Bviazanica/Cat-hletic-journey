@@ -154,7 +154,14 @@ def load_entity_animations(scale):
                 for i in range(num_of_frames):
                     img = pygame.image.load(
                         f'platformer/data/images/entities/{entity_type}/{animation}/{i}.png').convert_alpha()
-                    if entity_type == 'Spikeman' or entity_type == 'Snake':
+                    if entity_type == 'Spikeman':
+                        if i == 0:
+                            img = pygame.transform.smoothscale(
+                                img, (TILE_SIZE, TILE_SIZE))
+                        else:
+                            img = pygame.transform.smoothscale(
+                                img, (TILE_SIZE - round(TILE_SIZE/4), TILE_SIZE ))
+                    elif  entity_type == 'Snake':
                         img = pygame.transform.smoothscale(
                             img, (TILE_SIZE, TILE_SIZE))
                     elif entity_type == 'Player' :
@@ -206,7 +213,6 @@ def reset_level():
 
 def load_level(level, img_list):
     level += 1
-    bg_scroll = 0
     world_data = reset_level()
     # load in level data and create world
     with open(f'platformer/data/maps/level{level}.csv', newline='') as csvfile:
@@ -347,7 +353,7 @@ class World():
                                            y * TILE_SIZE)
                         snakes_group.add(new_snake)
                     elif tile == 260:
-                        new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE -100, 100)
+                        new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE -100, 120)
                         enemies_group.add(new_spikeman)
                     elif tile == 261:
                         new_wingman = Wingman(3,x * TILE_SIZE, y * TILE_SIZE, 200)
@@ -409,13 +415,19 @@ class Entity(pygame.sprite.Sprite):
         # rect properties
         if self.entity_id == 0:
             self.action = int(Animation_type.Idle)
+            self.image = self.animation_list[self.action][self.frame_index]
+            self.rect = self.image.get_rect(width=45, height=70)
+        
         elif self.entity_id == 1:
             self.action = int(Animation_type.Walk)
+            self.image = self.animation_list[self.action][self.frame_index]
+            self.rect = self.image.get_rect()
+        
         elif self.entity_id == 2:
-            self.action = int(Animation_type.Run)
-
-        self.image = self.animation_list[self.action][self.frame_index]
-        self.rect = self.image.get_rect()
+            self.action = int(Animation_type.Walk)
+            self.image = self.animation_list[self.action][self.frame_index]
+            self.rect = self.image.get_rect()
+        
         self.rect.topleft = (x, y)
         self.width = self.image.get_width()
         self.height = self.image.get_height()
@@ -423,40 +435,49 @@ class Entity(pygame.sprite.Sprite):
         self.collision_treshold = 25
 
         if self.entity_id == 0:
-            self.health_points = 1
+            self.health_points = 3
         elif self.entity_id != 0:
             self.health_points = 1
 
        
         self.new_state = False
         # self.states = {'Death':'Death','Fall': 'Fall', 'Idle':'Idle', 'Jump':'Jump','Run':'Run','Slide':'Slide','Walk':'Walk'}
-
         # self.state = self.states['Idle']
+        self.in_death_animation = False
 
         self.on_platform = False
         self.was_on_platform = False
 
     def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
-
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
             self.invulnerability = False
         if self.boosted and self.local_time - self.boost_start_time > effect_durations['Boost']:
             self.speed = 300
             self.boosted = False
+
+        if self.rect.x > world.get_world_length() or self.rect.x + self.rect.width < 0 or \
+                        self.rect.y + self.rect.height < 0 or self.rect.y > SCREEN_HEIGHT:
+                    # if self.entity_id == 0:
+                    self.hurt(True)
+
+        if self.in_death_animation == False:
+            if self.entity_id == 0:
+                self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
+                self.flip = True if self.direction < 0 else False
+
+            elif self.entity_id != 0:
+                self.set_action(int(Animation_type.Walk))
+                self.determine_movement()
+                self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
+
+            if self.air_timer > 0 and self.was_on_platform:
+                self.vel_y = 1
+        else:
+            self.set_action(int(Animation_type.Death))
+
         
-        if self.entity_id == 0:
-            self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
-            self.flip = True if self.direction < 0 else False
-
-        elif self.entity_id != 0:
-            self.set_action(int(Animation_type.Walk))
-            self.determine_movement()
-            self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
-
-        if self.air_timer > 0 and self.was_on_platform:
-            self.vel_y = 1
-
+                    
         self.update_animation()
 
     def move(self, moving_left, moving_right, world, all_platforms,tick):
@@ -486,7 +507,6 @@ class Entity(pygame.sprite.Sprite):
                 # check collision in the x direction
                 if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                     self.direction *= -1
-                    print(self.rect.x + dx)
                     
             
         if self.entity_id == 0:
@@ -498,29 +518,25 @@ class Entity(pygame.sprite.Sprite):
 
             for spike in spikes_group:
                 if spike.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height) and not self.invulnerability:
-                    self.hurt()
+                    self.hurt(False)
             
             for cloud in clouds_group:
                 if cloud.rect.colliderect(self.rect.x + dy, self.rect.y + dy, self.width, self.height) and not self.invulnerability:
-                    self.hurt()
+                    self.hurt(False)
             
         if self.rect.y + dy < 0:
             dy = 0
             self.vel_y = 0
 
-        on_platform = None
         for platform in all_platforms:
             if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
-                # check if above platform
-                if abs((self.rect.bottom) - platform.rect.top) <= self.collision_treshold:
-                    on_platform = platform
                 if platform.move_x != 0:
                     dx += platform.direction * platform.speed * tick
         
         dx= round(dx)
         dy = round(dy)
-        self.rect, colls, on_platform = move_with_collisions(
-            self, tick,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
+        self.rect, colls = move_with_collisions(
+            self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
         
         if colls['bottom'] or colls['bottom-platform']:
             self.air_timer = 0
@@ -555,12 +571,30 @@ class Entity(pygame.sprite.Sprite):
         self.rect.x = round(position[0])
         self.rect.y = round(position[1])
 
-    def hurt(self):
-        if self.health_points - 1 > 0:
-            self.health_points -= 1
-            self.reset_position(self.checkpoint_position)
-        else:
-            self.alive = False
+    def hurt(self, out_of_bounds):
+        if not self.in_death_animation:
+            if self.health_points - 1 > 0:
+                if not out_of_bounds:
+                    self.in_death_animation = True
+                    self.health_points -= 1
+                    print('reset in bound')
+                else:
+                    self.health_points -= 1
+                    self.reset_position(self.checkpoint_position)
+                    print('reset out of bound')
+            else:
+                self.health_points -= 1
+                if not out_of_bounds:
+                    self.in_death_animation = True
+                    print('dead in bound')
+                else:
+                    if self.entity_id != 0:
+                        self.kill()
+                    self.alive = False
+                    print('dead out of  bound')
+            print(f'{self.alive, self.in_death_animation,self.entity_id, self.health_points, self.rect}')
+
+            
     
     def use(self, possible_use_item_list, snakes_group):
         for item in possible_use_item_list:
@@ -575,9 +609,14 @@ class Entity(pygame.sprite.Sprite):
                 break
             
     def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
-                                                                              offset_x), round(self.rect.y -
-                                                                                             offset_y)))
+        if self.entity_id == 0:
+            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                                offset_x - 20), round(self.rect.y -
+                                                                                                    offset_y-10)))
+        else:
+            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                                offset_x), round(self.rect.y -
+                                                                                                    offset_y)))                                                                                                            
         pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
                                                    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
         if self.entity_id == 0:
@@ -598,13 +637,31 @@ class Entity(pygame.sprite.Sprite):
 
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
-        self.image = self.animation_list[self.action][self.frame_index]
+        if self.entity_id == 2:
+            center = self.rect.center
+            self.image = self.animation_list[self.action][self.frame_index]
+            self.rect = self.image.get_rect()
+            self.rect.center = center
+        else:
+            self.image = self.animation_list[self.action][self.frame_index]
+
         if self.local_time - self.update_time > ANIMATION_COOLDOWN:
             self.update_time = self.local_time
             self.frame_index += 1
 
         if self.frame_index >= len(self.animation_list[self.action]):
-            self.frame_index = 0
+            if self.action == int(Animation_type.Death):
+                if self.entity_id == 0 and self.health_points != 0:
+                    self.reset_position(self.checkpoint_position)
+                    self.action = int(Animation_type.Idle)
+                    self.in_death_animation = False
+                    self.frame_index = 0
+                else:
+                    if self.entity_id != 0:
+                        self.kill()
+                    self.alive = False
+            else:
+                self.frame_index = 0
 
     def set_action(self, new_action):
         if new_action != self.action:
@@ -742,7 +799,19 @@ class Water(pygame.sprite.Sprite):
 
     def collide_water(self, target):
         if pygame.sprite.collide_rect(self, target):
-            target.hurt()
+            target.hurt(False)
+
+class ItemBox(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x - offset_x),
+                                 round(self.rect.y-offset_y)))
 
 
 class Collectible(pygame.sprite.Sprite):
@@ -1070,10 +1139,6 @@ def game():
     global level_complete
     level_complete = False
 
-    # define player action variables
-    moving_left = False
-    moving_right = False
-
     # store tiles in a list
     img_list = []
     for x in range(TILE_TYPES):
@@ -1118,9 +1183,9 @@ def game():
                     player.moving_left = True
                     player.direction = -1
                 if event.key == pygame.K_d:
-                    player.direction = 1
                     player.moving_right = True
-                if event.key == pygame.K_w and player.alive:
+                    player.direction = 1
+                if event.key == pygame.K_w and player.alive and player.jump == False:
                     if player.air_timer < 10:
                         jump_vel = round(-1800 * tick_in_seconds)
                         if jump_vel < -20:
@@ -1141,12 +1206,13 @@ def game():
                 if event.key == pygame.K_e:
                     player.use(levers_group, snakes_group)
 
-        if player.in_air:
-            player.set_action(int(Animation_type.Jump))
-        elif player.moving_left or player.moving_right:
-            player.set_action(int(Animation_type.Run))
-        else:
-            player.set_action(int(Animation_type.Idle))
+        if not player.in_death_animation:
+            if player.in_air:
+                player.set_action(int(Animation_type.Jump))
+            elif player.moving_left or player.moving_right:
+                player.set_action(int(Animation_type.Run))
+            else:
+                player.set_action(int(Animation_type.Idle))
         
         if player.alive:
             # Update methods

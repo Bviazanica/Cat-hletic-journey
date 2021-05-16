@@ -13,11 +13,16 @@ def collision_not_tile(rect, object_list):
             hit_list.append(obj)
     return hit_list
 
+def apply_gravitation(current_vel, GRAVITY, tick, GRAVITY_FORCE_LIMIT):
+    current_vel += round(GRAVITY * tick)
+    if current_vel > GRAVITY_FORCE_LIMIT:
+        current_vel = GRAVITY_FORCE_LIMIT
+    return current_vel
 
-def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks):
+def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks, item_boxes):
     # we can treat platforms and tiles as same collision type
-    collision_types = {'top': False, 'bottom': False,
-                       'right': False, 'left': False, 'bottom-platform': False, 'invisible-block-top': False}
+    collision_types = {'top': False, 'bottom': False, 
+                       'right': False, 'left': False, 'bottom-platform': False, 'invisible-block-top': False ,'item-box-top': False}
     # check if desired movement is collision
     entity.rect.x += movement[0]
     # first we check X axis collisions
@@ -30,7 +35,15 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
         elif movement[0] < 0:
             entity.rect.left = tile.right
             collision_types['left'] = True
-            
+
+    hit_list = collision_not_tile(entity.rect, item_boxes)
+    for box in hit_list:
+        if movement[0] > 0:
+            entity.rect.right = box.rect.left
+            collision_types['right'] = True
+        elif movement[0] < 0:
+            entity.rect.left = box.rect.right
+            collision_types['left'] = True
 
     # x collision for platforms
     hit_list = collision_not_tile(entity.rect, platforms)
@@ -48,7 +61,6 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
         for sprite in hit_list:
             if sprite.alive and not sprite.in_death_animation and not entity.invulnerability:
                 entity.hurt(False)
-                print('hurt x')
 
     # checking collisions for Y axis
     entity.rect.y += movement[1]
@@ -71,6 +83,18 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
             block.visible = True
             collision_types['invisible-block-top'] = True
 
+    hit_list = collision_not_tile(entity.rect, item_boxes)
+    for box in hit_list:
+        if movement[1] < 0:
+            entity.rect.top = box.rect.bottom
+            if entity.entity_id == 0:
+                box.hits_to_break -= 1
+                box.new_state = True
+            collision_types['item-box-top'] = True
+            
+        elif movement[1] > 0:
+            entity.rect.bottom = box.rect.top
+            collision_types['bottom'] = True
     # y collision with platforms
     hit_list = collision_not_tile(entity.rect, platforms)
     for platform in hit_list:
@@ -96,5 +120,8 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
                         sprite.in_death_animation = True
                 elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold and not entity.invulnerability:
                     entity.hurt(False)
+
+       
+
 
     return entity.rect, collision_types

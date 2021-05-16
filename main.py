@@ -130,7 +130,7 @@ clouds_group = pygame.sprite.Group()
 wingmans_group = pygame.sprite.Group()
 levers_group = pygame.sprite.Group()
 snakes_group = pygame.sprite.Group()
-
+item_boxes_group = pygame.sprite.Group()
 def draw_background(canvas, offset_x, offset_y):
     canvas.blit(sky_background_image, (0, 0))
 
@@ -203,6 +203,7 @@ def reset_level():
     snakes_group.empty()
     wingmans_group.empty()
     levers_group.empty()
+    item_boxes_group.empty()
     # create empty tile list
     data = []
     for row in range(ROWS):
@@ -317,9 +318,17 @@ class World():
                         new_block = InvisibleBlock(
                             img, x*TILE_SIZE, y*TILE_SIZE)
                         self.invisible_blocks_list.append(new_block)
+                    elif tile == 193:
+                        new_item_box = ItemBox(
+                            img, x*TILE_SIZE, y*TILE_SIZE, 2)
+                        item_boxes_group.add(new_item_box)
                     elif tile == 210 or tile == 211:
                         new_spike = Spike(img, x * TILE_SIZE, y * TILE_SIZE)
                         spikes_group.add(new_spike)
+                    elif tile == 215:
+                        new_item_box = ItemBox(
+                            img, x*TILE_SIZE, y*TILE_SIZE, 1)
+                        item_boxes_group.add(new_item_box)
                     elif tile == 230:
                         lever = Lever(x * TILE_SIZE, y * TILE_SIZE, 'green')
                         levers_group.add(lever)
@@ -344,21 +353,21 @@ class World():
                         new_enemy = Entity(1, x * TILE_SIZE,
                                            y * TILE_SIZE, 150)
                         enemies_group.add(new_enemy)
-                    elif tile == 240:  # create enemy
+                    elif tile == 240:  # create Cloud
                         new_cloud = Cloud(cloud_image, x * TILE_SIZE,
                                            y * TILE_SIZE)
                         clouds_group.add(new_cloud)
-                    elif tile == 258:  # create enemy
+                    elif tile == 258:  # create Snake
                         new_snake = Snake(4, x * TILE_SIZE,
                                            y * TILE_SIZE)
                         snakes_group.add(new_snake)
-                    elif tile == 260:
+                    elif tile == 260: # create Spikeman
                         new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE -100, 120)
                         enemies_group.add(new_spikeman)
-                    elif tile == 261:
+                    elif tile == 261: # create Wingman
                         new_wingman = Wingman(3,x * TILE_SIZE, y * TILE_SIZE, 200)
                         enemies_group.add(new_wingman)
-                    elif tile == 263:
+                    elif tile == 263: # create Checkpoint
                         new_checkpoint = Checkpoint(
                             img, x * TILE_SIZE, y * TILE_SIZE)
                         checkpoints_group.add(new_checkpoint)
@@ -453,13 +462,12 @@ class Entity(pygame.sprite.Sprite):
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
             self.invulnerability = False
         if self.boosted and self.local_time - self.boost_start_time > effect_durations['Boost']:
-            self.speed = 300
+            self.speed = 300 #nastavit na speed before
             self.boosted = False
 
         if self.rect.x > world.get_world_length() or self.rect.x + self.rect.width < 0 or \
                         self.rect.y + self.rect.height < 0 or self.rect.y > SCREEN_HEIGHT:
-                    # if self.entity_id == 0:
-                    self.hurt(True)
+            self.hurt(True)
 
         if self.in_death_animation == False:
             if self.entity_id == 0:
@@ -476,8 +484,6 @@ class Entity(pygame.sprite.Sprite):
         else:
             self.set_action(int(Animation_type.Death))
 
-        
-                    
         self.update_animation()
 
     def move(self, moving_left, moving_right, world, all_platforms,tick):
@@ -492,9 +498,7 @@ class Entity(pygame.sprite.Sprite):
             dx = self.speed * tick
         
         # apply gravity
-        self.vel_y += round(GRAVITY * tick)
-        if self.vel_y > GRAVITY_FORCE_LIMIT:
-            self.vel_y = GRAVITY_FORCE_LIMIT
+        self.vel_y = apply_gravitation(self.vel_y, GRAVITY, tick, GRAVITY_FORCE_LIMIT)
 
         dy += self.vel_y
         self.in_air = True
@@ -536,12 +540,11 @@ class Entity(pygame.sprite.Sprite):
         dx= round(dx)
         dy = round(dy)
         self.rect, colls = move_with_collisions(
-            self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list)
+            self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
         
         if colls['bottom'] or colls['bottom-platform']:
             self.air_timer = 0
             self.in_air = False
-            dy = 0
             self.on_platform = True
             self.jump = False
         else:
@@ -555,7 +558,7 @@ class Entity(pygame.sprite.Sprite):
         if not self.on_platform and self.air_timer > 0 and self.was_on_platform and not self.jump:
             self.vel_y = 1
             self.was_on_platform = False
-        if colls['top']:
+        if colls['top'] or colls['item-box-top']:
             self.vel_y = 0
 
     def determine_movement(self):
@@ -596,14 +599,16 @@ class Entity(pygame.sprite.Sprite):
 
             
     
-    def use(self, possible_use_item_list, snakes_group):
+    def use(self, possible_use_item_list, snakes_group, current_time):
         for item in possible_use_item_list:
             if self.rect.colliderect(item.rect):
                 if item.lever_type == 'green':
                     if item.activated:
                         item.action(snakes_group, 'Appear')
+                        
                     else:
                         item.action(snakes_group, 'Disappear')
+                        item.activation_time = current_time
                 elif item.lever_type == 'red':
                     pass
                 break
@@ -747,14 +752,23 @@ class Item(pygame.sprite.Sprite):
     def __init__(self, image, item_type, x, y):
         pygame.sprite.Sprite.__init__(self)
         self.item_type = item_type
+        self.entity_id = 10
         self.image = image
         self.rect = self.image.get_rect()
         self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
     
-    def update(self, target, current_time):
+        self.vel_y = 0
+    def update(self, target, current_time, tick, world, all_platforms, item_boxes_group):
+        dx = 0
+        dy = 0
+        self.vel_y = apply_gravitation(self.vel_y, GRAVITY, tick, GRAVITY_FORCE_LIMIT)
+        dy += self.vel_y
         if self.rect.colliderect(target.rect):
             self.action(target, current_time)
             self.kill()
+
+        self.rect, colls = move_with_collisions(
+                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
 
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
@@ -802,13 +816,26 @@ class Water(pygame.sprite.Sprite):
             target.hurt(False)
 
 class ItemBox(pygame.sprite.Sprite):
-    def __init__(self, img, x, y):
+    def __init__(self, img, x, y, hits_to_break):
         pygame.sprite.Sprite.__init__(self)
         self.image = img
         self.rect = self.image.get_rect()
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
+        self.destroy = False
+        self.hits_to_break = hits_to_break
+        self.new_state = False
+
+    def update(self, img_list):
+        if self.new_state:
+            if self.hits_to_break == 0:
+                self.new_state = False
+                self.destroy = True
+            elif self.hits_to_break == 1:
+                self.image = img_list[215]
+                self.new_state = False
+                
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x - offset_x),
                                  round(self.rect.y-offset_y)))
@@ -919,6 +946,30 @@ class Spike(pygame.sprite.Sprite):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
 
+#TODO crate 
+class Crate(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.entity_id = 99
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y +
+                            (TILE_SIZE - self.image.get_height()))
+
+    def update(self, target, current_time, tick, world, all_platforms, item_boxes_group):
+        dx = 0
+        dy = 0
+        self.vel_y = apply_gravitation(self.vel_y, GRAVITY, tick, GRAVITY_FORCE_LIMIT)
+        dy += self.vel_y
+
+        self.rect, colls = move_with_collisions(
+                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
+
+
+    def draw(self, canvas, offset_x, offset_y):
+        canvas.blit(self.image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))
+
 class Snake(pygame.sprite.Sprite):
     def __init__(self,id, x, y ):
         pygame.sprite.Sprite.__init__(self)
@@ -929,6 +980,8 @@ class Snake(pygame.sprite.Sprite):
         self.action = 2
 
         self.active = True
+
+        self.vel_y = 0
 
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
@@ -943,15 +996,20 @@ class Snake(pygame.sprite.Sprite):
         self.update_time = 0
         self.local_time = 0
 
-    def update(self,current_time, tick_in_seconds, world, all_platforms, player):
+    def update(self,current_time, tick, world, all_platforms, player, item_boxes_group):
         self.local_time = current_time
-        if is_close(self.rect, player.rect, 50):
-            self.state = self.states['Attack']
-            self.new_state = True
-
-        self.flip = True if player.rect.center > self.rect.center else False
-    
+        
+        dx = 0
+        dy = 0
         if self.active:
+            self.vel_y = apply_gravitation(self.vel_y, GRAVITY, tick, GRAVITY_FORCE_LIMIT)
+            dy += self.vel_y
+            if is_close(self.rect, player.rect, 50):
+                self.state = self.states['Attack']
+                self.new_state = True
+
+            self.flip = True if player.rect.center > self.rect.center else False
+            
             if self.new_state:
                 if self.state == self.states['Idle']:
                     self.set_action(int(Animation_type.Idle))
@@ -962,6 +1020,9 @@ class Snake(pygame.sprite.Sprite):
                     self.set_action(int(Animation_type.Disappear))
                 elif self.state == self.states['Attack']:
                     self.set_action(int(Animation_type.Attack))
+
+            self.rect, colls = move_with_collisions(
+                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
             self.update_animation()
 
 
@@ -1039,7 +1100,7 @@ class Wingman(pygame.sprite.Sprite):
         self.location = (x, y)
         self.speed = speed
 
-    def update(self,current_time, tick_in_seconds, world, all_platforms):
+    def update(self,current_time, tick, world, all_platforms):
         pass
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
@@ -1096,9 +1157,14 @@ class Lever(pygame.sprite.Sprite):
         self.location = self.rect.midtop
 
         self.activated = False
+        self.activation_time = 0
         self.new_state = False
         
-    def update(self):
+    def update(self, current_time, snakes_group):
+        # print(f'{self.activation_time, current_time, current_time - self.activation_time}')
+        if self.activated and current_time - self.activation_time > 5000:
+            self.new_state = True
+            self.action(snakes_group, 'Appear')
         if self.new_state:
             if self.activated:
                 self.reset_to_default()
@@ -1131,7 +1197,8 @@ class Lever(pygame.sprite.Sprite):
         for member in group:
             member.state = member.states[state]
             member.new_state = True
-            member.active = True
+            member.active = not member.active
+    
                                 
 def game():
     # level
@@ -1160,7 +1227,7 @@ def game():
     # Game loop.
     while running:
         time_per_frame = Clock.tick(FPS)
-        tick_in_seconds = time_per_frame / 1000.0
+        tick = time_per_frame / 1000.0
         current_time += time_per_frame
         screen.fill((0, 0, 0))
         canvas.fill((0, 0, 0))
@@ -1169,8 +1236,8 @@ def game():
                 level, img_list)
             level_complete = False
         
-        if tick_in_seconds > 0.3:
-            tick_in_seconds = 0.2
+        if tick > 0.3:
+            tick = 0.2
         # User input
         for event in pygame.event.get():
             # quit game
@@ -1185,9 +1252,9 @@ def game():
                 if event.key == pygame.K_d:
                     player.moving_right = True
                     player.direction = 1
-                if event.key == pygame.K_w and player.alive and player.jump == False:
+                if event.key == pygame.K_w and player.alive and player.jump == False and not player.in_death_animation:
                     if player.air_timer < 10:
-                        jump_vel = round(-1800 * tick_in_seconds)
+                        jump_vel = round(-1800 * tick)
                         if jump_vel < -20:
                             jump_vel = -20
                         player.vel_y = jump_vel
@@ -1204,7 +1271,7 @@ def game():
                 if event.key == pygame.K_w:
                     pass
                 if event.key == pygame.K_e:
-                    player.use(levers_group, snakes_group)
+                    player.use(levers_group, snakes_group, current_time)
 
         if not player.in_death_animation:
             if player.in_air:
@@ -1217,24 +1284,52 @@ def game():
         if player.alive:
             # Update methods
             for platform in all_platforms:
-                platform.update(world, tick_in_seconds)
+                platform.update(world, tick)
 
-            player.update(current_time, tick_in_seconds,  world, all_platforms)
+            player.update(current_time, tick,  world, all_platforms)
 
             for enemy in enemies_group:
-                enemy.update(current_time, tick_in_seconds, world, all_platforms)
+                enemy.update(current_time, tick, world, all_platforms)
+
+            for box in item_boxes_group:
+                box.update(img_list)
+                if box.destroy:
+                    #spawn item
+                    if random.random() > 0.05:
+                        choice = random.choice(['Bubble', 'Health', 'Boost', 'Spikeman', 'Snake', 'Green_enemy'])
+                        if choice == 'Bubble':
+                            new_item = Item(bubble_item_image, choice, box.rect.x, box.rect.y)
+                            items_group.add(new_item)
+                        elif choice == 'Health':
+                            new_item = Item(health_item_image, choice, box.rect.x, box.rect.y)
+                            items_group.add(new_item)
+                        elif choice == 'Boost':
+                            new_item = Item(boost_item_image,  choice, box.rect.x, box.rect.y)
+                            items_group.add(new_item)
+                        elif choice == 'Spikeman':
+                            new_spikeman = Entity(2,  box.rect.x, box.rect.top, 120)
+                            enemies_group.add(new_spikeman)
+                        elif choice == 'Snake':
+                            new_snake = Snake(4, box.rect.x, box.rect.top)
+                            snakes_group.add(new_snake)
+                        elif choice == 'Green_enemy':
+                            new_enemy = Entity(1, box.rect.x, box.rect.top, 150)
+                            enemies_group.add(new_enemy)
+
+                        
+                    box.kill()
 
             for snake in snakes_group:
-                snake.update(current_time, tick_in_seconds, world, all_platforms, player)
+                snake.update(current_time, tick, world, all_platforms, player, item_boxes_group)
 
             for checkpoint in checkpoints_group:
                 checkpoint.update(player)
 
             for lever in levers_group:
-                lever.update()
+                lever.update(current_time, snakes_group)
 
             for item in items_group:
-                item.update(player,current_time)
+                item.update(player, current_time, tick, world, all_platforms, item_boxes_group)
 
             for exit in exit_group:
                 exit.update(player)
@@ -1266,6 +1361,9 @@ def game():
 
             for platform in all_platforms:
                 platform.draw(canvas, offset_x, offset_y)
+
+            for box in item_boxes_group:
+                box.draw(canvas, offset_x, offset_y)
 
             for block in invisible_blocks:
                 block.draw(canvas, offset_x, offset_y)

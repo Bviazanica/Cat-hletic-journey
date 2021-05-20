@@ -5,11 +5,11 @@ vec = pygame.math.Vector2
 
 
 class Camera:
-    def __init__(self, player):
+    def __init__(self, player, screen_width, screen_height):
         self.player = player
         self.offset = vec(0, 0)
         self.offset_float = vec(0, 0)
-        self.DISPLAY_W, self.DISPLAY_H = 800, 600
+        self.DISPLAY_W, self.DISPLAY_H = screen_width, screen_height
         self.CONST = vec(-self.DISPLAY_W/2 +
                          player.rect.width / 2, -self.DISPLAY_H/2 + player.rect.height/2)
 

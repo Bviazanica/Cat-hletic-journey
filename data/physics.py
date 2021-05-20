@@ -14,7 +14,7 @@ def collision_not_tile(rect, object_list):
     return hit_list
 
 def apply_gravitation(current_vel, GRAVITY, tick, GRAVITY_FORCE_LIMIT):
-    current_vel += round(GRAVITY * tick)
+    current_vel += GRAVITY * tick
     if current_vel > GRAVITY_FORCE_LIMIT:
         current_vel = GRAVITY_FORCE_LIMIT
     return current_vel
@@ -60,7 +60,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
         hit_list = collision_not_tile(entity.rect, sprites)
         for sprite in hit_list:
             if sprite.alive and not sprite.in_death_animation and not entity.invulnerability:
-                entity.hurt(False)
+                entity.hurt(False, 'sprite')
 
     # checking collisions for Y axis
     entity.rect.y += movement[1]

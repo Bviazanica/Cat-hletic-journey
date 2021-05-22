@@ -50,6 +50,12 @@
                 "move_x": 1,
                 "move_y": 0,
                 "direction": 1
+            },
+            {
+                "id": 4,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1
             }
         ],
         "level_3": [

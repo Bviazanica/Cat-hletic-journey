@@ -11,20 +11,27 @@ def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, pl
     return surface
 
 
-def draw_text(text, font, color, surface, x, y):
+def draw_text(text, font, color, surface, x, y, mid):
     textobj = font.render(text, 1, color)
     textrect = textobj.get_rect()
-    textrect.midtop = (x, y)
+    if mid:
+        textrect.midtop = (x, y)
+    else:
+        textrect.topleft = (x, y)
     surface.blit(textobj, textrect)
 
 def is_close(object1, object2, distance):
     return math.hypot(object2.centerx-object1.centerx, object2.centery-object1.centery) < float(distance)
 
-def transform_images(images, width, height):
+def transform_images(images, width, height, smooth):
     images_list = []
     for i in images:
-        img = pygame.transform.scale(
-            i, (width, height))
+        if smooth:
+            img = pygame.transform.smoothscale(
+                i, (width, height))
+        else:
+            img = pygame.transform.scale(
+                i, (width, height))
         images_list.append(img)
 
     return images_list

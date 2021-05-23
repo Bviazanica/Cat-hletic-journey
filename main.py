@@ -13,7 +13,7 @@ from enum import IntEnum
 from data.json_reader import *
 from data.cut_scenes import *
 from data.globals import *
-from typing import NewType
+from typing import Final, NewType
 
 vec = pygame.math.Vector2
 
@@ -28,7 +28,7 @@ FULLSCREEN = False
 GRAVITY = round(SCREEN_HEIGHT / 12)
 GRAVITY_FORCE_LIMIT = round(SCREEN_HEIGHT / 40)
 ROWS = 15
-COLS = 100
+COLS = 50
 TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
 TILE_TYPES = 264
 
@@ -65,7 +65,7 @@ platforms_json_data = platforms_data()
 intro_scene = True
 # font
 font = pygame.font.Font('platformer/data/font/kenvector_future.ttf', 70)
-font_small = pygame.font.Font('platformer/data/font/kenvector_future.ttf', 30)
+font_small = pygame.font.Font('platformer/data/font/kenvector_future.ttf', 22)
 
 blue_fish_image = pygame.image.load(
     f'platformer/data/images/entities/Fish/Idle/0.png').convert_alpha()
@@ -103,11 +103,26 @@ bubble_item_image = pygame.image.load(
     f'platformer/data/images/tiles/57.png').convert_alpha()
 boost_item_image = pygame.image.load(
     f'platformer/data/images/tiles/58.png').convert_alpha()
+bubble_image =  pygame.image.load(
+    f'platformer/data/images/other/bubble.png').convert_alpha()
 health_item_image = pygame.image.load(
     f'platformer/data/images/tiles/59.png').convert_alpha()
 
-bubble_image =  pygame.image.load(
-    f'platformer/data/images/other/bubble.png').convert_alpha()
+player_head_image =  pygame.image.load(
+    f'platformer/data/images/other/player_head.png').convert_alpha()
+friend_head_image =  pygame.image.load(
+    f'platformer/data/images/other/friend_head.png').convert_alpha()
+guard_head_image =  pygame.image.load(
+    f'platformer/data/images/other/guard_head.png').convert_alpha()
+
+skull_image = pygame.image.load(
+    f'platformer/data/images/items/cage/skull.png').convert_alpha()
+cage_back_image = pygame.image.load(
+    f'platformer/data/images/items/cage/cage_back.png').convert_alpha()
+cage_opened_image = pygame.image.load(
+    f'platformer/data/images/items/cage/cage_opened.png').convert_alpha()
+cage_closed_image = pygame.image.load(
+    f'platformer/data/images/items/cage/cage_closed.png').convert_alpha()
 
 effect_durations = {
     'Bubble':5000,
@@ -136,6 +151,7 @@ wingmans_group = pygame.sprite.Group()
 levers_group = pygame.sprite.Group()
 snakes_group = pygame.sprite.Group()
 item_boxes_group = pygame.sprite.Group()
+cages_group = pygame.sprite.Group()
 
 friend_group = pygame.sprite.Group()
 guardian_group = pygame.sprite.Group()
@@ -143,7 +159,7 @@ guardian_group = pygame.sprite.Group()
 class CutSceneOne:
     def __init__(self, player, wingman,friend, started_time):
         # Variables
-        self.name = 'scene'
+        self.name = 'intro scene'
         self.step = 0
         self.current_time = 0
         self.cut_scene_running = True
@@ -154,6 +170,9 @@ class CutSceneOne:
         self.wingman = wingman
 
         self.new_step = True
+
+        self.dialogue_in_progress = False
+        self.image = player_head_image
 
         # text to render
         self.text = {
@@ -208,9 +227,11 @@ class CutSceneOne:
                 self.new_step = False
                 
             if int(self.text_counter) < len(self.text['one']):
+                self.dialogue_in_progress = True
                 self.text_counter += 0.2
                 self.time_in_scene = self.current_time
             elif self.current_time - self.time_in_scene > 3000:
+                self.dialogue_in_progress = False
                 self.step = 3
                 self.new_step=True
                 
@@ -218,7 +239,6 @@ class CutSceneOne:
             if self.new_step:
                 self.new_step = False
                 self.player.set_action(int(Animation_type.Run))
-            
             self.player.rect.x += self.player.speed * tick
         if self.step == 4:
                 self.cut_scene_running = False
@@ -226,20 +246,22 @@ class CutSceneOne:
         return self.cut_scene_running
 
     def draw(self, canvas, font):
-        if self.step == 2:
-            draw_text(
-                self.text['one'][0:int(self.text_counter)],
-                font,
-                (255, 255, 255),
-                canvas,
-                SCREEN_WIDTH/2,
-                SCREEN_HEIGHT - 50,
-            )
+        if self.dialogue_in_progress:
+            if self.step == 2:
+                draw_text(
+                    self.text['one'][0:int(self.text_counter)],
+                    font,
+                    WHITE,
+                    canvas,
+                    SCREEN_WIDTH/4,
+                    SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
+                    False
+                )
 
 class CutSceneTwo:
     def __init__(self, player, guard, started_time):
         # Variables
-        self.name = 'scene'
+        self.name = 'scene 2'
         self.step = 0
         self.current_time = 0
         self.cut_scene_running = True
@@ -250,11 +272,13 @@ class CutSceneTwo:
 
         self.new_step = True
 
+        self.image = player_head_image
+        self.dialogue_in_progress = False
         # text to render
         self.text = {
-            'one': "I will take your 40 fish...",
+            'one': "I will take 20 of your fishes...",
             'two-option-1': "You can go on...",
-            'two-option-2': "You dont have enough fish... Me angry"
+            'two-option-2': "You dont have enough fishes... Me angry"
         }
         self.text_counter = 0
         self.time_in_scene = 0
@@ -269,7 +293,7 @@ class CutSceneTwo:
                 self.player.speed = 0
                 self.player.locked = True
                 self.new_step = False
-            if self.current_time - self.started_time > 3000:
+            if self.current_time - self.started_time > 2000:
                 self.new_step = True
                 self.step = 1
                 self.text_counter = 0
@@ -277,36 +301,64 @@ class CutSceneTwo:
         if self.step == 1:
             if self.new_step:
                 self.new_step = False
+                self.image = guard_head_image
             if int(self.text_counter) < len(self.text['one']):
+                self.dialogue_in_progress = True
                 self.text_counter += 0.2
                 self.time_in_scene = self.current_time
-            elif self.current_time - self.time_in_scene > 3000:
+            elif self.current_time - self.time_in_scene > 2000:
                 self.step = 2
+                self.dialogue_in_progress = False
                 self.new_step = True
                 self.text_counter = 0
     
         if self.step == 2:
             if self.new_step:
                 self.new_step = False
+                self.image = guard_head_image
 
             if self.player.fish >= 40:
                 if int(self.text_counter) < len(self.text['two-option-1']):
                     self.text_counter += 0.2
+                    self.dialogue_in_progress = True
                     self.time_in_scene = self.current_time
-                elif self.current_time - self.time_in_scene > 3000:
-                    self.player.speed = 3*TILE_SIZE
-                    self.player.rect.x += self.player.speed * tick
-                    self.player.set_action(int(Animation_type.Walk))
+                elif self.current_time - self.time_in_scene > 2000:
+                    self.step = 3
+                    self.dialogue_in_progress = False
+                    self.new_step = True
+                    self.text_counter = 0
+                    
             elif self.player.fish < 40:
                 if int(self.text_counter) < len(self.text['two-option-2']):
+                    self.dialogue_in_progress = True
                     self.text_counter += 0.2
                     self.time_in_scene = self.current_time
-                elif self.current_time - self.time_in_scene > 3000:
-                    self.player.speed = 3*TILE_SIZE
-                    self.player.rect.x += -self.player.speed * tick
-                    self.player.set_action(int(Animation_type.Walk))
-                    self.player.flip = True
+                elif self.current_time - self.time_in_scene > 2000:
+                    self.step = 3
+                    self.dialogue_in_progress = False
+                    self.new_step = True
+                    self.text_counter = 0
             
+        if self.step == 3:
+            if self.new_step:
+                self.new_step = False
+
+            if self.player.fish >= 40:
+                self.guard.set_action(int(Animation_type.Extra))
+                self.guard.frame_index = 1
+                self.player.speed = 3*TILE_SIZE
+                self.player.rect.x += self.player.speed * tick
+                self.player.set_action(int(Animation_type.Walk))
+
+            elif self.player.fish < 40:
+                self.guard.set_action(int(Animation_type.Extra))
+                self.guard.frame_index = 0
+                self.player.speed = 3*TILE_SIZE
+                self.player.rect.x += -self.player.speed * tick
+                self.player.set_action(int(Animation_type.Walk))
+                self.player.flip = True
+                self.dialogue_in_progress = False
+
             if self.player.in_death_animation:
                 self.new_step = False
                 self.player.health_points = 0
@@ -315,16 +367,199 @@ class CutSceneTwo:
         return self.cut_scene_running
 
     def draw(self, canvas, font):
-        if self.step == 1:
-            draw_text(
-                self.text['one'][0:int(self.text_counter)],
-                font,
-                (255, 255, 255),
-                canvas,
-                SCREEN_WIDTH/2,
-                SCREEN_HEIGHT - 50,
-            )
+        if self.dialogue_in_progress:
+            if self.step == 1:
+                draw_text(
+                    self.text['one'][0:int(self.text_counter)],
+                    font,
+                    WHITE,
+                    canvas,
+                    SCREEN_WIDTH/4,
+                    SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
+                    False
+                )
+            elif self.step == 2 and self.player.fish >= 40:
+                draw_text(
+                    self.text['two-option-1'][0:int(self.text_counter)],
+                    font,
+                    WHITE,
+                    canvas,
+                    SCREEN_WIDTH/4,
+                    SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
+                    False
+                )
+            elif self.step == 2 and self.player.fish < 40:
+                draw_text(
+                    self.text['two-option-2'][0:int(self.text_counter)],
+                    font,
+                    WHITE,
+                    canvas,
+                    SCREEN_WIDTH/4,
+                    SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
+                    False
+                )
 
+class FinalCutScene:
+    def __init__(self, player,friend, started_time):
+        # Variables
+        self.name = 'final scene'
+        self.step = 0
+        self.current_time = 0
+        self.cut_scene_running = True
+        self.started_time = started_time
+        # If we need to control the player while a cut scene running
+        self.player = player
+        self.friend = friend
+
+        self.new_step = True
+
+        self.dialogue_in_progress = False
+        self.image = player_head_image
+
+        # text to render
+        self.text = {
+            'one': "Thank you for saving me!",
+            'two': "Let's get some fish and milk now",
+            'three': "Good idea"
+        }
+        self.text_counter = 0
+        self.time_in_scene = 0
+
+    def update(self, time_passed, tick):
+        self.current_time = time_passed
+        pressed = pygame.key.get_pressed()
+
+        if self.step == 0:
+            if self.new_step:
+                self.new_step = False
+                self.player.locked = True
+                self.player.moving_left = self.player.moving_right = False
+                self.player.set_action(int(Animation_type.Idle))
+                
+            
+            if self.current_time - self.started_time > 2000:
+                self.new_step = True
+                self.step = 1
+                self.text_counter = 0
+
+        if self.step == 1:
+            if self.new_step:
+                self.new_step = False
+                self.friend.locked = False
+                self.friend.vel_y = 0
+                if self.friend.in_air:
+                    self.friend.set_action(int(Animation_type.Jump))
+                self.time_in_scene = self.current_time
+            
+            if not self.friend.in_air:
+                self.friend.set_action(int(Animation_type.Idle))
+
+            if self.current_time - self.time_in_scene > 2000:
+                self.step = 2
+                self.new_step = True
+
+        if self.step == 2:
+            if self.new_step:
+                self.new_step = False
+                self.image = friend_head_image
+                self.friend.flip = False
+                self.player.direction = -1
+            
+            if int(self.text_counter) < len(self.text['one']):
+                    self.dialogue_in_progress = True
+                    self.text_counter += 0.2
+                    self.time_in_scene = self.current_time
+                
+            elif self.player.rect.colliderect(self.friend.rect.x + (self.friend.speed/3 * tick) \
+                 + self.friend.rect.width, self.friend.rect.y, self.friend.rect.width, self.friend.rect.height):
+                self.step = 3
+                self.dialogue_in_progress = False
+                self.new_step = True
+                self.text_counter = 0
+                self.friend.set_action(int(Animation_type.Idle))
+            else:
+                self.friend.set_action(int(Animation_type.Walk))
+                self.friend.rect.x += self.friend.speed/3 *tick
+            
+        
+        if self.step == 3:
+            if self.new_step:
+                self.new_step = False
+                self.image = player_head_image
+
+            if int(self.text_counter) < len(self.text['two']):
+                    self.dialogue_in_progress = True
+                    self.text_counter += 0.2
+                    self.time_in_scene = self.current_time
+            elif self.current_time - self.time_in_scene > 2000:
+                self.step = 4
+                self.dialogue_in_progress = False
+                self.new_step = True
+                self.text_counter = 0
+            
+        if self.step == 4:
+            if self.new_step:
+                self.new_step = False
+                self.image = friend_head_image
+
+            if int(self.text_counter) < len(self.text['three']):
+                    self.dialogue_in_progress = True
+                    self.text_counter += 0.2
+                    self.time_in_scene = self.current_time
+            elif self.current_time - self.time_in_scene > 2000:
+                self.step = 5
+                self.dialogue_in_progress = False
+                self.new_step = True
+                self.text_counter = 0
+        
+        if self.step == 5:
+            if self.new_step:
+                self.new_step = False
+                self.friend.set_action(int(Animation_type.Walk))
+                self.player.set_action(int(Animation_type.Walk))
+                self.player.direction = -1
+                self.friend.flip = True
+                
+            self.friend.rect.x += -self.friend.speed/3 *tick
+            self.player.rect.x += -self.player.speed/3 *tick
+
+        if self.step == 6:
+            self.cut_scene_running = False
+
+        return self.cut_scene_running
+
+    def draw(self, canvas, font):
+        if self.dialogue_in_progress:
+            if self.step == 2:
+                draw_text(
+                    self.text['one'][0:int(self.text_counter)],
+                    font,
+                    WHITE,
+                    canvas,
+                    SCREEN_WIDTH/4,
+                    SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
+                    False
+                )
+            if self.step == 3:
+                draw_text(
+                    self.text['two'][0:int(self.text_counter)],
+                    font,
+                    WHITE,
+                    canvas,
+                    SCREEN_WIDTH/4,
+                    SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
+                    False
+                )
+            if self.step == 4:
+                draw_text(
+                    self.text['three'][0:int(self.text_counter)],
+                    font,
+                    WHITE,
+                    canvas,
+                    SCREEN_WIDTH/4,
+                    SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
+                    False
+                )
 # manager for cutscenes
 class CutSceneManager:
     def __init__(self, canvas):
@@ -335,6 +570,8 @@ class CutSceneManager:
         # Drawing variables
         self.canvas = canvas
         self.window_size = 0
+
+        self.canvas_height = self.canvas.get_height()
 
     def start_cut_scene(self, cut_scene):
         if cut_scene.name not in self.cut_scenes_complete:
@@ -348,7 +585,7 @@ class CutSceneManager:
 
     def update(self, time_passed, time_passed_seconds, level):
         if self.cut_scene_running:
-            if self.window_size < self.canvas.get_height()*0.2:
+            if self.window_size < self.canvas_height*0.2:
                 self.window_size += 2
             self.cut_scene_running = self.cut_scene.update(
                 time_passed, time_passed_seconds)
@@ -362,6 +599,9 @@ class CutSceneManager:
                              (0, 0, self.canvas.get_width(), self.window_size))
             pygame.draw.rect(self.canvas, BLACK,
                              (0, SCREEN_HEIGHT-self.window_size, self.canvas.get_width(), self.window_size))
+            
+            if self.window_size == self.canvas_height*0.2 and self.cut_scene.dialogue_in_progress:
+                canvas.blit(self.cut_scene.image, (SCREEN_WIDTH/10, self.canvas_height - self.canvas_height*0.01 - self.cut_scene.image.get_height()))
             # Draw specific cut scene details
             self.cut_scene.draw(self.canvas, font)
 
@@ -370,7 +610,7 @@ def draw_background(canvas, offset_x, offset_y, background_images):
     for x in range(3):
         parallax_variable = 0.1
         for image in background_images:
-            canvas.blit(image, ((x * SCREEN_WIDTH - offset_x * parallax_variable), 0 - offset_y*parallax_variable))
+            canvas.blit(image, (int(x * SCREEN_WIDTH - offset_x * parallax_variable), 0 - offset_y*parallax_variable))
             parallax_variable += 0.05
 
 # load all images & animations
@@ -453,6 +693,7 @@ def reset_level():
     wingmans_group.empty()
     levers_group.empty()
     item_boxes_group.empty()
+    cages_group.empty()
 
     friend_group.empty()
     guardian_group.empty()
@@ -496,6 +737,7 @@ class World():
         # iterate through each value in level data file
         platform_id = 0
         fake_platform_id = 0
+        cage_id = 0
         for y, row in enumerate(data):
             platform = []
             for x, tile in enumerate(row):
@@ -508,7 +750,6 @@ class World():
 
                     if tile in (66, 67, 68, 69, 70, 89, 90, 92, 94, 95, 96, 111, 112, 115):
                         self.obstacles_list.append(tile_data)
-                    
                     elif tile == 56:  # create invis tile
                         self.bounds_tiles_list.append(tile_data)
                     elif tile == 57:
@@ -520,6 +761,10 @@ class World():
                     elif tile == 59:
                         new_item = Item(boost_item_image,'Boost', x*TILE_SIZE, y*TILE_SIZE)
                         items_group.add(new_item)
+                    elif tile == 20:
+                        new_cage = Cage(x*TILE_SIZE, y*TILE_SIZE, cage_id)
+                        cage_id += 1
+                        cages_group.add(new_cage)
                     elif tile == 71:
                         platform.append(PlatformPart(
                             img, x*TILE_SIZE, y*TILE_SIZE))
@@ -642,6 +887,9 @@ class Entity(pygame.sprite.Sprite):
         self.entity_id = entity_id
         self.alive = True
 
+        self.x = x
+        self.y = y
+
         self.speed = speed
         self.direction = 1
 
@@ -693,7 +941,7 @@ class Entity(pygame.sprite.Sprite):
         self.on_platform = False
         self.was_on_platform = False
 
-    def update(self, current_time, tick, world, all_platforms, cut_scene_manager):
+    def update(self, current_time, tick, world, all_platforms):
         self.local_time = current_time
 
         if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
@@ -717,7 +965,7 @@ class Entity(pygame.sprite.Sprite):
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
             elif self.entity_id == 3:
                 pass #wingman
-            elif self.entity_id == 6:
+            elif self.entity_id == 6: #friend code
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
             elif self.entity_id == 7:
                 #guardian code
@@ -821,6 +1069,8 @@ class Entity(pygame.sprite.Sprite):
             self.action = int(Animation_type.Idle)
             self.image = self.animation_list[self.action][self.frame_index]
             self.rect = self.image.get_rect(width=TILE_SIZE, height=TILE_SIZE*2 - TILE_SIZE//3)
+            if self.entity_id==6:
+                self.locked = True
         elif entity_id == 7:
             self.action = int(Animation_type.Idle)
             self.image = self.animation_list[self.action][self.frame_index]
@@ -861,18 +1111,20 @@ class Entity(pygame.sprite.Sprite):
 
             
     
-    def use(self, possible_use_item_list, snakes_group, current_time):
+    def use(self, possible_use_item_list, snake_group, cage_group, current_time):
         for item in possible_use_item_list:
             if self.rect.colliderect(item.rect):
                 if item.lever_type == 'green':
                     if item.activated:
-                        item.action(snakes_group, 'Appear')
-                        
+                        item.action(snake_group, 'Appear')
                     else:
-                        item.action(snakes_group, 'Disappear')
+                        item.action(snake_group, 'Disappear')
                         item.activation_time = current_time
                 elif item.lever_type == 'red':
-                    pass
+                    if item.activated:
+                        item.action(cage_group, False)
+                    else:
+                        item.action(cage_group, True)
                 break
             
     def draw(self, canvas, offset_x, offset_y):
@@ -885,13 +1137,21 @@ class Entity(pygame.sprite.Sprite):
             canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
                                                                                 offset_x), round(self.rect.y -
                                                                                                     offset_y)))                                                                                                            
-        pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
-                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
+        # pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+        #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
         if self.entity_id == 0:
             bubble_rect = bubble_image.get_rect()
             bubble_rect.center = self.rect.center
             if self.invulnerability:
                 canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
+
+    def simple_collision_check(self, entities):
+        collision = False
+        for en in entities:
+            if pygame.sprite.collide_rect(self, en):
+                collision = True
+
+        return collision
 
     def draw_fish(self, canvas):
         canvas.blit(blue_fish_image, (TILE_SIZE//4, TILE_SIZE//4))
@@ -1197,6 +1457,46 @@ class Exit(pygame.sprite.Sprite):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
 
+class Cage(pygame.sprite.Sprite):
+    def __init__(self, x, y, id):
+        pygame.sprite.Sprite.__init__(self)
+        
+        self.cage_id = id
+
+        self.is_open = False
+        self.have_skull = True
+        
+        if self.cage_id == 0:
+            self.have_skull = False
+
+        self.new_state = False
+        
+        self.image = cage_closed_image
+
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x, y)
+        
+    def update(self):
+        if self.new_state:
+            lefttop_position = self.rect.topleft
+            if self.is_open:
+                self.image = cage_opened_image
+            else:
+                self.image = cage_closed_image
+
+            self.rect = self.image.get_rect()
+            self.rect.topleft = lefttop_position
+
+    def draw(self, canvas, offset_x, offset_y):
+        if self.have_skull:
+            canvas.blit(skull_image, (round(self.rect.x -
+                                       offset_x), round(self.rect.bottom - skull_image.get_height()*1.1 - offset_y)))
+        canvas.blit(self.image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))
+
+    def draw_back(self, canvas, offset_x, offset_y):
+        canvas.blit(cage_back_image, (round(self.rect.x -
+                                       offset_x), round(self.rect.y - offset_y)))
 
 class Spike(pygame.sprite.Sprite):
     def __init__(self, img, x, y):
@@ -1211,29 +1511,6 @@ class Spike(pygame.sprite.Sprite):
                                        offset_x), round(self.rect.y - offset_y)))
         pygame.draw.rect(canvas, (255, 0, 0),
                          (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
-#TODO crate 
-class Crate(pygame.sprite.Sprite):
-    def __init__(self, img, x, y):
-        pygame.sprite.Sprite.__init__(self)
-        self.entity_id = 99
-        self.image = img
-        self.rect = self.image.get_rect()
-        self.rect.midtop = (x + TILE_SIZE // 2, y +
-                            (TILE_SIZE - self.image.get_height()))
-
-    def update(self, target, current_time, tick, world, all_platforms, item_boxes_group):
-        dx = 0
-        dy = 0
-        self.vel_y = apply_gravitation(self.vel_y, GRAVITY, tick, GRAVITY_FORCE_LIMIT)
-        dy += self.vel_y
-
-        self.rect, colls = move_with_collisions(
-                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
-
-
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
 
 class Snake(pygame.sprite.Sprite):
     def __init__(self,id, x, y ):
@@ -1407,9 +1684,11 @@ class Lever(pygame.sprite.Sprite):
         self.new_state = False
         
     def update(self, current_time, snakes_group):
-        if self.activated and current_time - self.activation_time > 5000:
-            self.new_state = True
-            self.action(snakes_group, 'Appear')
+        if self.lever_type == 'green':
+            if self.activated and current_time - self.activation_time > 5000:
+                self.new_state = True
+                self.action(snakes_group, 'Appear')
+
         if self.new_state:
             if self.activated:
                 self.reset_to_default()
@@ -1435,14 +1714,19 @@ class Lever(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.midtop = self.location
 
-    def action(self,group, state):
+    def action(self, group, state):
         self.new_state = True
         self.activated = not self.activated
+        if self.lever_type == 'green':
+            for member in group:
+                member.state = member.states[state]
+                member.new_state = True
+                member.active = True
 
-        for member in group:
-            member.state = member.states[state]
-            member.new_state = True
-            member.active = True
+        elif self.lever_type == 'red':
+            for member in group:
+                member.is_open = state
+                member.new_state = True
     
                                 
 def game():
@@ -1453,6 +1737,13 @@ def game():
     global fake_platform_green
     global fake_ground_green
     global intro_scene
+    global skull_image
+    global cage_opened_image
+    global cage_closed_image
+    global cage_back_image
+    global player_head_image
+    global friend_head_image
+    global guard_head_image
     level_complete = False
 
     # level
@@ -1473,14 +1764,25 @@ def game():
 
     running = True
     current_time = 0
-    background_images = transform_images(background_images, SCREEN_WIDTH, SCREEN_HEIGHT)
+
     bubble_image = pygame.transform.smoothscale(
             bubble_image, (TILE_SIZE*2, TILE_SIZE*2))
-    random_images = transform_images([health_image, fake_platform_green, fake_ground_green], TILE_SIZE, TILE_SIZE)
+    skull_image = pygame.transform.smoothscale(
+            skull_image, (TILE_SIZE*2, TILE_SIZE*2))
+    cage_opened_image = pygame.transform.smoothscale(
+            cage_opened_image, (TILE_SIZE*4, TILE_SIZE*5))
 
+    scenes_head_images = transform_images([player_head_image, friend_head_image, guard_head_image], TILE_SIZE*2, TILE_SIZE*2, True)
+    background_images = transform_images(background_images, SCREEN_WIDTH, SCREEN_HEIGHT, True)
+    random_images = transform_images([health_image, fake_platform_green, fake_ground_green], TILE_SIZE, TILE_SIZE, False)
+    cage_related_images = transform_images([cage_back_image, cage_closed_image], TILE_SIZE*2, TILE_SIZE*5, True)
+
+    player_head_image, friend_head_image, guard_head_image = return_images_from_list(scenes_head_images)
+    cage_back_image, cage_closed_image = return_images_from_list(cage_related_images)
     health_image, fake_platform_green, fake_ground_green = return_images_from_list(random_images)
     world, player, camera, all_platforms, invisible_blocks, level,cut_scene_manager = load_level(
-        2, img_list)
+        4, img_list)
+
     # Game loop.
     while running:
         time_per_frame = Clock.tick(FPS)
@@ -1496,6 +1798,14 @@ def game():
         if tick > 0.3:
             tick = 0.2
 
+        guard = friend = wingman = None
+        if bool(friend_group):
+            friend = random.choice(friend_group.sprites())
+        if bool(guardian_group):  
+            guard = random.choice(guardian_group.sprites())
+        if bool(wingmans_group):
+            wingman = random.choice(wingmans_group.sprites())
+        
         # User input
         for event in pygame.event.get():
             # quit game
@@ -1529,7 +1839,7 @@ def game():
                     if event.key == pygame.K_w:
                         pass
                     if event.key == pygame.K_e:
-                        player.use(levers_group, snakes_group, current_time)
+                        player.use(levers_group, snakes_group, cages_group, current_time)
 
         if not player.in_death_animation and not player.locked:
             if player.in_air:
@@ -1541,22 +1851,18 @@ def game():
 
         if player.alive:
             # Update methods
-            player.update(current_time, tick,  world, all_platforms, cut_scene_manager)
-            level_complete = cut_scene_manager.update(current_time, tick,level)
+            player.update(current_time, tick,  world, all_platforms)
+            cut_scene_manager.update(current_time, tick,level)
             for platform in all_platforms:
                 platform.update(world, tick)
 
             for enemy in enemies_group:
-                enemy.update(current_time, tick, world, all_platforms,cut_scene_manager)
+                enemy.update(current_time, tick, world, all_platforms)
 
-            for friend in friend_group:
-                friend.update(current_time, tick, world, all_platforms,cut_scene_manager)
-
-            for guard in guardian_group:
-                guard.update(current_time, tick, world, all_platforms,cut_scene_manager)
-
-            for wingman in wingmans_group:
-                wingman.update(current_time, tick, world, all_platforms,cut_scene_manager)
+            if guard:
+                guard.update(current_time, tick, world, all_platforms)
+            if wingman:
+                wingman.update(current_time, tick, world, all_platforms)
 
             for box in item_boxes_group:
                 box.update(img_list)
@@ -1597,6 +1903,17 @@ def game():
             for item in items_group:
                 item.update(player, current_time, tick, world, all_platforms, item_boxes_group)
 
+            for cage in cages_group:
+                cage.update()
+
+            if friend:
+                in_cage = friend.simple_collision_check(cages_group)
+                friend.update(current_time, tick, world, all_platforms)
+                if friend.locked == True and level == 5 and in_cage:
+                    friend.rect.x = friend.x - friend.rect.width//2
+                    friend.rect.bottom = friend.y - friend.rect.height*0.1
+                    friend.flip = True
+
             for exit in exit_group:
                 exit.update(player)
             for block in invisible_blocks.copy():
@@ -1609,9 +1926,9 @@ def game():
                         platform.rect.y + platform.rect.height < 0 or platform.rect.y > 800:
                     all_platforms.pop(all_platforms.index(platform))
 
-            
             if pygame.sprite.spritecollide(player, exit_group, False):
                 level_complete = True
+            
             # adjust camera to player
             camera.scroll()
             offset_x, offset_y = camera.offset.x, camera.offset.y
@@ -1640,10 +1957,23 @@ def game():
             for exit in exit_group:
                 exit.draw(canvas, offset_x, offset_y)
 
-            for friend in friend_group:
-                friend.draw(canvas, offset_x, offset_y)
+            for cage in cages_group:
+                cage.draw_back(canvas, offset_x, offset_y)
+            
+            if friend:
+                if level == 5 and friend.locked:
+                    for friend in friend_group:
+                        friend.draw(canvas, offset_x, offset_y)
+                    for cage in cages_group:
+                        cage.draw(canvas, offset_x, offset_y)
 
-            for wingman in wingmans_group:
+                elif friend.locked == False:
+                    for cage in cages_group:
+                        cage.draw(canvas, offset_x, offset_y)
+                    for friend in friend_group:
+                        friend.draw(canvas, offset_x, offset_y)
+
+            if wingman:
                 wingman.draw(canvas, offset_x, offset_y)
 
             for water in water_group:
@@ -1666,7 +1996,7 @@ def game():
             for cloud in clouds_group:
                 cloud.draw(canvas, offset_x, offset_y)
             
-            for guard in guardian_group:
+            if guard:
                 guard.draw(canvas, offset_x, offset_y)
 
             
@@ -1684,10 +2014,15 @@ def game():
                 cut_scene_manager.start_cut_scene(
                                 CutSceneOne(player, wingman, friend, current_time))
                 intro_scene = False
-            elif level == 3 and pygame.sprite.collide_rect(player, guard):
+        if level == 3 and pygame.sprite.collide_rect(player, guard):
                 cut_scene_manager.start_cut_scene(
                                 CutSceneTwo(player, guard, current_time))
-
+        elif level == 5 and bool(wingmans_group) == False:
+            for lever in levers_group:
+                if lever.activated:
+                    cut_scene_manager.start_cut_scene(
+                                FinalCutScene(player, friend, current_time))
+                    break
         cut_scene_manager.draw(font_small)    
         screen.blit(canvas, (0, 0))
         pygame.display.flip()
@@ -1780,7 +2115,7 @@ def show_credits():
                 if event.key == K_ESCAPE:
                     running = False
         draw_text('Credits', font, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50)
+                                      canvas, SCREEN_WIDTH//2, 50, True)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
@@ -1813,7 +2148,7 @@ def settings():
                         controls()
         clickable = True
         draw_text('Settings', font, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50)
+                                      canvas, SCREEN_WIDTH//2, 50, True)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
@@ -1829,7 +2164,7 @@ def controls():
                 if event.key == K_ESCAPE:
                     running = False
         draw_text('Controls', font, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50)
+                                      canvas, SCREEN_WIDTH//2, 50, True)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
@@ -1884,11 +2219,11 @@ def resolutions():
                     GRAVITY = round(SCREEN_HEIGHT / 12)
                     GRAVITY_FORCE_LIMIT = round(SCREEN_HEIGHT / 40)
                     animations_list = load_entity_animations()
-            draw_text(texts[x], font_small, BLACK, canvas, button.rect.centerx, button.rect.y)
+            draw_text(texts[x], font_small, BLACK, canvas, button.rect.centerx, button.rect.y, True)
                 
         clickable = True
         draw_text('Resolution', font, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50)
+                                      canvas, SCREEN_WIDTH//2, 50, True)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 

@@ -48,7 +48,6 @@ class Follow(CamScroll):
 
 # camera which follows player, but can go to edges
 
-
 class Border(CamScroll):
     def __init__(self, camera, player, map_length):
         CamScroll.__init__(self, camera, player)

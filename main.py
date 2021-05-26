@@ -1,10 +1,11 @@
+from hashlib import new
 import pygame
 import math
 import sys
 import os
 import csv
 import random
-from pygame import font
+from pygame import Vector2, font
 from pygame.locals import *
 from data.button import Button
 from data.camera.camera import *
@@ -32,6 +33,8 @@ ROWS = 15
 COLS = 50
 TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
 TILE_TYPES = 264
+
+BORDER_LEFT, BORDER_RIGHT = 0,0
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -137,7 +140,6 @@ background_images = [sky_background_image, rocks_background_image, mountain_back
                         clouds4_background_image]
 
 
-
 # create sprite groups
 decoration_group = pygame.sprite.Group()
 water_group = pygame.sprite.Group()
@@ -156,6 +158,7 @@ snakes_group = pygame.sprite.Group()
 item_boxes_group = pygame.sprite.Group()
 cages_group = pygame.sprite.Group()
 
+projectiles_group = pygame.sprite.Group()
 friend_group = pygame.sprite.Group()
 guardian_group = pygame.sprite.Group()
 
@@ -790,7 +793,6 @@ class CutSceneManager:
                              (0, SCREEN_HEIGHT-self.window_size, self.canvas.get_width(), self.window_size))
             
             if self.window_size >= self.canvas_height*0.2 and self.cut_scene.dialogue_in_progress:
-                print('obrazok')
                 canvas.blit(self.cut_scene.image, (SCREEN_WIDTH/10, self.canvas_height - self.canvas_height*0.01 - self.cut_scene.image.get_height()))
             # Draw specific cut scene details
             self.cut_scene.draw(self.canvas, font)
@@ -806,7 +808,7 @@ def draw_background(canvas, offset_x, offset_y, background_images):
 # load all images & animations
 def load_entity_animations():
     animation_types = ['Death', 'Fall', 'Idle', 'Jump', 'Run', 'Slide', 'Walk', 'Attack', 'Appear', 'Disappear', 'Extra']
-    entity_types = ['Player', 'Green_enemy', 'Spikeman', 'Wingman','Snake', 'Fish', 'Friend', 'Guardian']
+    entity_types = ['Player', 'Green_enemy', 'Spikeman', 'Wingman','Snake', 'Fish', 'Friend', 'Guardian', 'Flyingman']
 
     list_of_loaded_animations = []
     for entity_type in entity_types:
@@ -846,6 +848,9 @@ def load_entity_animations():
                     elif entity_type == 'Guardian':
                         img = pygame.transform.smoothscale(
                             img, (TILE_SIZE*4 , TILE_SIZE*4))
+                    elif entity_type == 'Flyingman':
+                        img = pygame.transform.scale(
+                            img, (TILE_SIZE ,TILE_SIZE))
                     else:
                         img = pygame.transform.scale(
                             img, (int(img.get_width() ), int(img.get_height())))
@@ -884,7 +889,7 @@ def reset_level():
     levers_group.empty()
     item_boxes_group.empty()
     cages_group.empty()
-
+    projectiles_group.empty()
     friend_group.empty()
     guardian_group.empty()
 
@@ -898,6 +903,8 @@ def reset_level():
 
 
 def load_level(level, img_list):
+    global BORDER_LEFT
+    global BORDER_RIGHT
     level += 1
     world_data = reset_level()
     # load in level data and create world
@@ -911,8 +918,10 @@ def load_level(level, img_list):
     world = World()
     player, camera, all_platforms, invisible_blocks = world.process_data(
         world_data, img_list, level)
+    BORDER_LEFT = 0
+    BORDER_RIGHT = world.level_length * TILE_SIZE
 
-    return world, player, camera, all_platforms, invisible_blocks, level, cut_scene_manager
+    return world, player, camera, all_platforms, invisible_blocks, level, cut_scene_manager, BORDER_LEFT, BORDER_RIGHT
 
 class World():
     def __init__(self):
@@ -988,7 +997,7 @@ class World():
                         img = random.choice(animations_list[5][2])
                         new_fish = Collectible(
                             'Fish', img, x * TILE_SIZE, y * TILE_SIZE)
-                        fish_group.add(new_fish)
+                        fish_group.add(new_fish)    
                     elif tile in (130, 152, 174):
                         exit = Exit(img, x * TILE_SIZE, y * TILE_SIZE)
                         exit_group.add(exit)
@@ -1020,6 +1029,9 @@ class World():
                             new_fish = Collectible(
                             'Fish', blue_fish_image, x * TILE_SIZE, y * TILE_SIZE )
                             fish_group.add(new_fish)
+                    elif tile == 237:
+                        new_flyingman = Entity(8, x *TILE_SIZE, y*TILE_SIZE, 3*TILE_SIZE)
+                        enemies_group.add(new_flyingman)
                     elif tile == 238:  # create player
                         player = Entity(0, x * TILE_SIZE,
                                         y * TILE_SIZE + TILE_SIZE, 6*TILE_SIZE)
@@ -1043,7 +1055,7 @@ class World():
                         new_wingman = Entity(3,x * TILE_SIZE, y * TILE_SIZE, 4*TILE_SIZE)
                         wingmans_group.add(new_wingman)
                     elif tile == 260: # create Spikeman
-                        new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE, 6*TILE_SIZE)
+                        new_spikeman = Entity(2,  x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE, 3*TILE_SIZE)
                         enemies_group.add(new_spikeman)
                     elif tile == 261:  # create Friend
                         new_friend = Entity(6,  x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE, 6*TILE_SIZE)
@@ -1119,14 +1131,21 @@ class Entity(pygame.sprite.Sprite):
 
         if self.entity_id == 0:
             self.health_points = 3
+        elif self.entity_id == 3:
+            self.health_points = 20
         elif self.entity_id != 0:
             self.health_points = 1
 
        
         self.new_state = False
-        # self.states = {'Death':'Death','Fall': 'Fall', 'Idle':'Idle', 'Jump':'Jump','Run':'Run','Slide':'Slide','Walk':'Walk'}
-        # self.state = self.states['Idle']
+        
         self.in_death_animation = False
+
+        self.desired = Vector2(0,0)
+        self.acceleration =  Vector2(0,0)
+        # how fast the acceleration vector follows desired vec
+        self.max_force = 0.2
+        self.approach_radius = 2*TILE_SIZE
 
         self.on_platform = False
         self.was_on_platform = False
@@ -1154,17 +1173,19 @@ class Entity(pygame.sprite.Sprite):
                 self.determine_movement()
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
             elif self.entity_id == 3:
-                pass #wingman
+                pass # wingman
             elif self.entity_id == 6: #friend code
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
-            elif self.entity_id == 7:
-                #guardian code
+            elif self.entity_id == 8:
                 pass
 
             if self.air_timer > 0 and self.was_on_platform:
                 self.vel_y = 1
         else:
-            self.set_action(int(Animation_type.Death))
+            if self.entity_id == 8:
+                self.kill()
+            else:
+                self.set_action(int(Animation_type.Death))
 
         self.update_animation()
 
@@ -1197,7 +1218,7 @@ class Entity(pygame.sprite.Sprite):
                     
             
         if self.entity_id == 0:
-            if self.rect.left + dx < 0 or self.rect.right + dx > (world.level_length * TILE_SIZE):
+            if self.rect.left + dx < BORDER_LEFT or self.rect.right + dx > BORDER_RIGHT:
                 dx = 0
             for fake_platform in fake_platforms_group:
                 if fake_platform.rect.colliderect(self.rect.x + dx, self.rect.y + dy, self.rect.width, self.rect.height):
@@ -1223,12 +1244,6 @@ class Entity(pygame.sprite.Sprite):
                     elif dx < 0 and platform.direction == 1:
                         print('dx< & 1')
                         dx += -(platform.direction * platform.speed * tick)
-                    # elif dx < 0 and platform.direction == -1:
-                    #     print('dx< & -1')
-                    #     dx += (platform.direction * platform.speed * tick)
-                    # elif dx > 0 and platform.direction == 1:
-                    #     print('dx> & 1')
-                    #     dx += platform.direction * platform.speed * tick
                     elif dx > 0 and platform.direction == -1:
                         print('dx> & -1')
                         dx += -(platform.direction * platform.speed * tick)
@@ -1237,7 +1252,7 @@ class Entity(pygame.sprite.Sprite):
         dx = round(dx)
         dy = round(dy)
         self.rect, colls = move_with_collisions(
-            self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
+            self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, tick)
         
         if colls['bottom'] or colls['bottom-platform']:
             self.air_timer = 0
@@ -1275,6 +1290,19 @@ class Entity(pygame.sprite.Sprite):
             self.rect = self.image.get_rect(width=TILE_SIZE, height=TILE_SIZE*2 - TILE_SIZE//3)
             if self.entity_id==6:
                 self.locked = True
+        elif entity_id == 3:
+            self.action = int(Animation_type.Walk)
+            self.image = self.animation_list[self.action][self.frame_index]
+            self.rect = self.image.get_rect()
+            self.states = {'shoot': 'shoot', 'dive': 'dive', 'hide':'hide', 'drop':'drop'}
+            self.cooldowns = {'shoot': 5000, 'drop': 5000, 'global': 1000}
+            self.shoot_timer = self.drop_timer = self.global_timer = -100000
+            self.stunned = False
+            self.stun_timer = 0
+
+            self.diving = False
+            self.dropped = 0
+            self.shot = 0
         elif entity_id == 7:
             self.action = int(Animation_type.Idle)
             self.image = self.animation_list[self.action][self.frame_index]
@@ -1285,7 +1313,50 @@ class Entity(pygame.sprite.Sprite):
             self.image = self.animation_list[self.action][self.frame_index]
             self.rect = self.image.get_rect()
     
+    def ai(self, player, tick):
+        self.acceleration += self.seek_with_approach(player.rect.center, tick)
+        self.rect.center += self.acceleration
+    
+    def boss_fight(self):
+        pass
+        #stage 1,
+            # 1 projectile
+            # dropdown attack
+
+            #dmg ked je dole - 3x 
+        #stage 2,
+            # z boku projektily / enemies (viac naraz s medzerou, za sebou viac)
+            #prezit
+        #stage 3
+
+            #dmg odrazat nieco / naviest ho na nieco co mu da dmg
         
+        
+        #drop hadov/zelenych entit
+        #shoot projectilou v patternoch - normal, viac naraz medzerou, za sebou, bouncy
+        # navadzany debilko s vrtulkou
+
+        #sposob na dmg bossa hmm
+    def shoot(self, pattern, speed, desired, time):
+        self.shoot_timer = time
+        print(f'shoot {desired}')
+        self.shot += 1
+        if pattern == 'basic':
+            new_projectile = Projectile(self.rect.centerx, self.rect.centery, speed, desired)
+            projectiles_group.add(new_projectile)
+        elif pattern == 'spray':
+            pass
+
+    def drop(self, stage, tick,time):
+        self.dropped += 1
+        self.drop_timer = time
+        if stage == 1:
+            new_entity = Entity(1, self.rect.centerx, self.rect.centery, 2*TILE_SIZE)
+            new_entity.vel_y = -self.jump_vel/5 * tick
+            enemies_group.add(new_entity)
+        elif stage == 3:
+            new_entity = Snake(4, self.rect.centerx, self.rect.centery)
+            snakes_group.add(new_entity)
 
     def reset_position(self, position):
         self.rect.x = round(position[0])
@@ -1297,24 +1368,40 @@ class Entity(pygame.sprite.Sprite):
                 if not out_of_bounds:
                     self.in_death_animation = True
                     self.health_points -= 1
-                    print('reset in bound')
                 else:
                     self.health_points -= 1
                     self.reset_position(self.checkpoint_position)
-                    print('reset out of bound')
             else:
                 self.health_points -= 1
                 if not out_of_bounds:
                     self.in_death_animation = True
-                    print('dead in bound')
                 else:
                     if self.entity_id != 0:
                         self.kill()
                     self.alive = False
-                    print('dead out of  bound')
 
-            
-    
+    def seek_with_approach(self, target, tick):
+        # vector from position -> target position
+        self.desired = (
+            target - Vector2(self.rect.centerx, self.rect.centery))
+        distance_length = self.desired.length()
+        if not distance_length == 0:
+            self.desired.normalize_ip()
+            if distance_length < self.approach_radius:
+                self.desired *= distance_length / self.approach_radius * self.speed * tick
+            else:
+                self.desired *= self.speed * tick
+
+            # vector from acceleration vector to desired vector position
+            steer = (self.desired - self.acceleration)
+
+            # scale of vector to have correct length
+            if steer.length() > self.max_force:
+                steer.scale_to_length(self.max_force)
+            return steer
+        else:
+            return Vector2(0, 0)
+
     def use(self, possible_use_item_list, snake_group, cage_group, current_time):
         for item in possible_use_item_list:
             if self.rect.colliderect(item.rect):
@@ -1341,21 +1428,15 @@ class Entity(pygame.sprite.Sprite):
             canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
                                                                                 offset_x), round(self.rect.y -
                                                                                                     offset_y)))                                                                                                            
-        # pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
-        #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
+        pygame.draw.rect(canvas, (255, 0, 0), (round(self.rect.x - offset_x),
+                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                            
         if self.entity_id == 0:
             bubble_rect = bubble_image.get_rect()
             bubble_rect.center = self.rect.center
             if self.invulnerability:
                 canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
 
-    def simple_collision_check(self, entities):
-        collision = False
-        for en in entities:
-            if pygame.sprite.collide_rect(self, en):
-                collision = True
-
-        return collision
+    
 
     def draw_fish(self, canvas):
         canvas.blit(blue_fish_image, (TILE_SIZE//4, TILE_SIZE//4))
@@ -1368,7 +1449,7 @@ class Entity(pygame.sprite.Sprite):
         ANIMATION_COOLDOWN = 100
         if self.entity_id == 7:
             ANIMATION_COOLDOWN = 300
-        if self.entity_id == 2:
+        if self.entity_id == 2 or self.entity_id == 8:
             center = self.rect.center
             self.image = self.animation_list[self.action][self.frame_index]
             self.rect = self.image.get_rect()
@@ -1495,7 +1576,7 @@ class Item(pygame.sprite.Sprite):
             self.kill()
 
         self.rect, colls = move_with_collisions(
-                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
+                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, tick)
 
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
@@ -1660,6 +1741,25 @@ class Exit(pygame.sprite.Sprite):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
 
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, x, y, speed, desired):
+        pygame.sprite.Sprite.__init__(self)
+
+        self.rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
+        self.speed = speed
+
+        self.desired = desired
+    def update(self, tick):
+        # print(self.desired)
+        #determine movement
+        self.rect.x += self.speed * tick * self.desired[0]
+        self.rect.y += self.speed * tick * self.desired[1]
+
+    def draw(self, canvas, offset_x, offset_y):
+        # canvas.blit(self.image, (round(self.rect.x -
+        #                                offset_x), round(self.rect.y - offset_y)))
+
+        pygame.draw.rect(canvas, RED, (self.rect.x - offset_x, self.rect.y - offset_y, self.rect.width, self.rect.height))
 class Cage(pygame.sprite.Sprite):
     def __init__(self, x, y, id):
         pygame.sprite.Sprite.__init__(self)
@@ -1765,7 +1865,7 @@ class Snake(pygame.sprite.Sprite):
                     self.set_action(int(Animation_type.Attack))
 
             self.rect, colls = move_with_collisions(
-                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group)
+                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, tick)
             self.update_animation()
 
 
@@ -1948,8 +2048,10 @@ def game():
     global friend_head_image
     global guard_head_image
     global tutorial
+    global BORDER_LEFT
+    global BORDER_RIGHT
     level_complete = False
-
+    
     # level
     if intro_scene:
         level = 0
@@ -1968,7 +2070,11 @@ def game():
 
     running = True
     game_finished = False
+    boss_fight = False
+    new_stage = False
     current_time = 0
+
+    last_camera_coord = 0.0,0.0
 
     bubble_image = pygame.transform.smoothscale(
             bubble_image, (TILE_SIZE*2, TILE_SIZE*2))
@@ -1985,9 +2091,9 @@ def game():
     player_head_image, friend_head_image, guard_head_image = return_images_from_list(scenes_head_images)
     cage_back_image, cage_closed_image = return_images_from_list(cage_related_images)
     health_image, fake_platform_green, fake_ground_green = return_images_from_list(random_images)
-    world, player, camera, all_platforms, invisible_blocks, level,cut_scene_manager = load_level(
-        1, img_list)
-
+    world, player, camera, all_platforms, invisible_blocks, \
+    level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
+        4, img_list)
     # Game loop.
     while running:
         time_per_frame = Clock.tick(FPS)
@@ -1996,10 +2102,10 @@ def game():
         screen.fill((0, 0, 0))
         canvas.fill((0, 0, 0))
         if level_complete:
-            world, player, camera, all_platforms, invisible_blocks, level,cut_scene_manager = load_level(
+            world, player, camera, all_platforms, invisible_blocks,\
+            level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
                 level, img_list)
             level_complete = False
-        
         if tick > 0.3:
             tick = 0.2
 
@@ -2058,6 +2164,15 @@ def game():
             else:
                 player.set_action(int(Animation_type.Idle))
 
+        
+        if level == 5 and player.rect.x > 30000:
+            boss_fight = True
+            new_stage = True
+            BORDER_LEFT, BORDER_RIGHT = 0 - last_camera_coord[0], 0 - last_camera_coord[1]
+            
+        if boss_fight and new_stage:
+            camera = None
+
         if player.alive:
             # Update methods
             player.update(current_time, tick,  world, all_platforms)
@@ -2067,11 +2182,42 @@ def game():
 
             for enemy in enemies_group:
                 enemy.update(current_time, tick, world, all_platforms)
+                if enemy.entity_id == 1:
+                    print(enemy.vel_y)
+                if enemy.entity_id == 8:
+                    enemy.ai(player, tick)
 
             if guard:
                 guard.update(current_time, tick, world, all_platforms)
+
             if wingman:
+                if wingman.local_time - wingman.global_timer > wingman.cooldowns['global'] and not wingman.diving:
+                    wingman.global_timer = current_time
+                    if wingman.local_time - wingman.shoot_timer > wingman.cooldowns['shoot']:
+                        desired = player.rect.center - \
+                            Vector2(wingman.rect.centerx, wingman.rect.centery)
+                        desired.normalize_ip()
+                        wingman.shoot('basic', 5*TILE_SIZE, desired, current_time)
+                    elif wingman.local_time - wingman.drop_timer > wingman.cooldowns['drop']:
+                        wingman.drop(3, tick,current_time)
+                    elif wingman.dropped >= 1 and wingman.shot >= 1:
+                        wingman.diving = True
+                    
+                elif wingman.diving and not wingman.stunned:
+                    dy = wingman.speed*tick
+                    for tile in world.obstacles_list:
+                        if tile[1].colliderect(wingman.rect.x, wingman.rect.y + dy, wingman.rect.width, wingman.rect.height):
+                            wingman.rect.bottom = tile[1].top
+                            wingman.stunned = True
+                            wingman.stun_timer = wingman.local_time
+                            dy = 0
+                    wingman.rect.y += dy
+                    
+                print(f'{wingman.diving, wingman.stunned}')
                 wingman.update(current_time, tick, world, all_platforms)
+
+            for projectile in projectiles_group:
+                projectile.update(tick)
 
             for box in item_boxes_group:
                 box.update(img_list)
@@ -2089,13 +2235,13 @@ def game():
                             new_item = Item(boost_item_image,  choice, box.rect.x, box.rect.y)
                             items_group.add(new_item)
                         elif choice == 'Spikeman':
-                            new_spikeman = Entity(2,  box.rect.x, box.rect.top, 120)
+                            new_spikeman = Entity(2,  box.rect.x, box.rect.top, 3*TILE_SIZE)
                             enemies_group.add(new_spikeman)
                         elif choice == 'Snake':
                             new_snake = Snake(4, box.rect.x, box.rect.top)
                             snakes_group.add(new_snake)
                         elif choice == 'Green_enemy':
-                            new_enemy = Entity(1, box.rect.x, box.rect.top, 150)
+                            new_enemy = Entity(1, box.rect.x, box.rect.top, 3*TILE_SIZE)
                             enemies_group.add(new_enemy)
                         
                     box.kill()
@@ -2116,7 +2262,7 @@ def game():
                 cage.update()
 
             if friend:
-                in_cage = friend.simple_collision_check(cages_group)
+                in_cage = simple_collision_check(friend, cages_group)
                 friend.update(current_time, tick, world, all_platforms)
                 if friend.locked == True and level == 5 and in_cage:
                     friend.rect.x = friend.x - friend.rect.width//2
@@ -2139,8 +2285,12 @@ def game():
                 level_complete = True
             
             # adjust camera to player
-            camera.scroll()
-            offset_x, offset_y = camera.offset.x, camera.offset.y
+            if bool(camera):
+                camera.scroll()
+                offset_x, offset_y = camera.offset.x, camera.offset.y
+                last_camera_coord = offset_x, offset_y 
+            else:
+                offset_x, offset_y = last_camera_coord
             # Draw methods
             draw_background(canvas, offset_x, offset_y, background_images)
             world.draw(canvas, offset_x, offset_y)
@@ -2169,6 +2319,9 @@ def game():
             for cage in cages_group:
                 cage.draw_back(canvas, offset_x, offset_y)
             
+            for projectile in projectiles_group:
+                projectile.draw(canvas, offset_x, offset_y)
+
             if friend:
                 if level == 5 and friend.locked:
                     for friend in friend_group:
@@ -2261,7 +2414,8 @@ def game_over_menu(player, level, img_list):
             if clickable:
                 if button.button_id == 0:
                     world_data = reset_level()
-                    world, player, camera, all_platforms, invisible_blocks, level, cut_scene_manager= load_level(
+                    world, player, camera, all_platforms, invisible_blocks, \
+                    level, cut_scene_manager, BORDER_LEFT, BORDER_RIGHT= load_level(
                         1, img_list)
                 elif button.button_id == 1:
                     pygame.quit()

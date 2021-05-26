@@ -41,3 +41,11 @@ def return_images_from_list(images):
     for i in images:
         new_images.append(i)
     return (new_images)
+
+def simple_collision_check(sprite, entities):
+        collision = False
+        for en in entities:
+            if pygame.sprite.collide_rect(sprite, en):
+                collision = True
+
+        return collision

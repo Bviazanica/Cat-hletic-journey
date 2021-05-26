@@ -19,7 +19,7 @@ def apply_gravitation(current_vel, GRAVITY, tick, GRAVITY_FORCE_LIMIT):
         current_vel = GRAVITY_FORCE_LIMIT
     return current_vel
 
-def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks, item_boxes):
+def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks, item_boxes, tick):
     # we can treat platforms and tiles as same collision type
     collision_types = {'top': False, 'bottom': False, 
                        'right': False, 'left': False, 'bottom-platform': False, 'invisible-block-top': False ,'item-box-top': False}
@@ -118,8 +118,16 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
                         entity.hurt(False)
                     else:
                         sprite.in_death_animation = True
+                        jump_vel = tick * -entity.jump_vel
+                        if jump_vel < -entity.jump_force:
+                            jump_vel = -entity.jump_force
+                        entity.vel_y = jump_vel
+                        entity.jump = True
+                        entity.on_platform = False
+
                 elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold and not entity.invulnerability:
-                    entity.hurt(False)
+                    entity.hurt(False, 'enemy')
+                    
 
        
 

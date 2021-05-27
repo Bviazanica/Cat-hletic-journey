@@ -1342,7 +1342,7 @@ class Entity(pygame.sprite.Sprite):
         print(f'shoot {desired}')
         self.shot += 1
         if pattern == 'basic':
-            new_projectile = Projectile(self.rect.centerx, self.rect.centery, speed, desired)
+            new_projectile = Projectile(self.rect.centerx, self.rect.centery, speed, desired, 1)
             projectiles_group.add(new_projectile)
         elif pattern == 'spray':
             pass
@@ -1742,18 +1742,22 @@ class Exit(pygame.sprite.Sprite):
                                        offset_x), round(self.rect.y - offset_y)))
 
 class Projectile(pygame.sprite.Sprite):
-    def __init__(self, x, y, speed, desired):
+    def __init__(self, x, y, speed, desired, direction):
         pygame.sprite.Sprite.__init__(self)
 
-        self.rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
+        self.rect = pygame.Rect(x, y, TILE_SIZE/2, TILE_SIZE/2)
         self.speed = speed
-
+        self.direction = direction
         self.desired = desired
+        self.position = Vector2(x,y)
     def update(self, tick):
         # print(self.desired)
         #determine movement
-        self.rect.x += self.speed * tick * self.desired[0]
-        self.rect.y += self.speed * tick * self.desired[1]
+        self.position[0] += (self.speed * tick * self.desired[0] * self.direction)
+        self.position[1] += (self.speed * tick * self.desired[1] * self.direction)
+
+        self.rect.x = self.position[0]
+        self.rect.y = self.position[1]
 
     def draw(self, canvas, offset_x, offset_y):
         # canvas.blit(self.image, (round(self.rect.x -
@@ -2072,7 +2076,10 @@ def game():
     game_finished = False
     boss_fight = False
     new_stage = False
+    stage = 0
     current_time = 0
+    timer = 0
+    counter = 0
 
     last_camera_coord = 0.0,0.0
 
@@ -2101,6 +2108,7 @@ def game():
         current_time += time_per_frame
         screen.fill((0, 0, 0))
         canvas.fill((0, 0, 0))
+
         if level_complete:
             world, player, camera, all_platforms, invisible_blocks,\
             level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
@@ -2165,10 +2173,12 @@ def game():
                 player.set_action(int(Animation_type.Idle))
 
         
-        if level == 5 and player.rect.x > 30000:
+        if level == 5 and player.rect.x > 700 and stage == 0:
+            stage = 1
             boss_fight = True
             new_stage = True
-            BORDER_LEFT, BORDER_RIGHT = 0 - last_camera_coord[0], 0 - last_camera_coord[1]
+            BORDER_LEFT, BORDER_RIGHT = 0 + last_camera_coord[0], 0 + last_camera_coord[0] + SCREEN_WIDTH
+
             
         if boss_fight and new_stage:
             camera = None
@@ -2191,33 +2201,103 @@ def game():
                 guard.update(current_time, tick, world, all_platforms)
 
             if wingman:
-                if wingman.local_time - wingman.global_timer > wingman.cooldowns['global'] and not wingman.diving:
-                    wingman.global_timer = current_time
-                    if wingman.local_time - wingman.shoot_timer > wingman.cooldowns['shoot']:
-                        desired = player.rect.center - \
-                            Vector2(wingman.rect.centerx, wingman.rect.centery)
-                        desired.normalize_ip()
-                        wingman.shoot('basic', 5*TILE_SIZE, desired, current_time)
-                    elif wingman.local_time - wingman.drop_timer > wingman.cooldowns['drop']:
-                        wingman.drop(3, tick,current_time)
-                    elif wingman.dropped >= 1 and wingman.shot >= 1:
-                        wingman.diving = True
+                if level == 5:
+                    if stage == 1:
+                        if new_stage:
+                            new_stage = False
+                        if wingman.local_time - wingman.global_timer > wingman.cooldowns['global'] and not wingman.diving:
+                            wingman.global_timer = current_time
+                            if wingman.local_time - wingman.shoot_timer > wingman.cooldowns['shoot']:
+                                desired = player.rect.center - \
+                                    Vector2(wingman.rect.centerx, wingman.rect.centery)
+                                desired.normalize_ip()
+                                wingman.shoot('basic', 5*TILE_SIZE, desired, current_time)
+                            elif wingman.local_time - wingman.drop_timer > wingman.cooldowns['drop']:
+                                wingman.drop(3, tick,current_time)
+                            elif wingman.dropped >= 1 and wingman.shot >= 1:
+                                wingman.diving = True
+                            
+                        elif wingman.diving and not wingman.stunned and wingman.stun_timer == 0:
+                            # ak ide dole
+                                dy = wingman.speed*tick
+                                for tile in world.obstacles_list:
+                                    if tile[1].colliderect(wingman.rect.x, wingman.rect.y + dy, wingman.rect.width, wingman.rect.height):
+                                        wingman.rect.bottom = tile[1].top
+                                        wingman.stunned = True
+                                        wingman.stun_timer = wingman.local_time
+                                        dy = 0
+                                wingman.rect.y += dy
+                            # je po stune a ide hore
+                        elif wingman.stunned:
+                            if wingman.local_time - wingman.stun_timer > 3000:
+                                wingman.stunned = False
+                        
+                        elif wingman.stun_timer != 0:
+                            wingman.rect.y += -wingman.speed*tick
+                            if wingman.rect.y< 0:
+                                wingman.rect.y = 0
+                                new_stage = True
+                                wingman.diving = False
+                                stage = 3
+
+                    elif stage == 2:
+                        if new_stage:
+                            direction = random.choice([-1,1])
+                            new_stage = False
+                            
+                        if current_time - timer > 2500 and counter < 5:
+                            counter += 1
+                            timer = current_time
+                            skip = random.choice([0,1,2])
+                            if direction == -1:
+                                spawn_x = BORDER_RIGHT + TILE_SIZE
+                            elif direction == 1:
+                                spawn_x = BORDER_LEFT - TILE_SIZE
+                                
+                            for i in range(3):
+                                if i == skip:
+                                    continue
+                                projectile = Projectile(spawn_x, SCREEN_HEIGHT - 5*TILE_SIZE - TILE_SIZE*i*2, 6*TILE_SIZE, Vector2(1,0), direction)
+                                projectiles_group.add(projectile)
                     
-                elif wingman.diving and not wingman.stunned:
-                    dy = wingman.speed*tick
-                    for tile in world.obstacles_list:
-                        if tile[1].colliderect(wingman.rect.x, wingman.rect.y + dy, wingman.rect.width, wingman.rect.height):
-                            wingman.rect.bottom = tile[1].top
-                            wingman.stunned = True
-                            wingman.stun_timer = wingman.local_time
-                            dy = 0
-                    wingman.rect.y += dy
-                    
-                print(f'{wingman.diving, wingman.stunned}')
+                        elif counter >= 5:
+                            stage = 3
+                            new_stage = True
+                    elif stage == 3:
+                        if new_stage:
+                            new_stage = False
+                            wingman.speed = 8*TILE_SIZE
+                        
+                        
+                        if wingman.local_time - wingman.global_timer > wingman.cooldowns['global'] and not wingman.diving:
+                                wingman.global_timer = current_time
+                                if wingman.local_time - wingman.shoot_timer > wingman.cooldowns['shoot']:
+                                    wingman.shoot_timer = wingman.local_time
+                                    spread = 20
+                                    desired = player.rect.center - \
+                                            Vector2(wingman.rect.centerx, wingman.rect.centery)
+                                    
+                                    for i in range(3):
+                                        new_desired_vector = desired.rotate(spread)
+                                        new_desired_vector.normalize_ip()
+                                        wingman.shoot('basic', 5*TILE_SIZE, new_desired_vector, current_time)
+                                        spread -= 20
+                                        print(i)
+                                    
+                                elif wingman.local_time - wingman.drop_timer > wingman.cooldowns['drop']:
+                                    wingman.drop(3, tick,current_time)
+
+                print(f'STAGE: {stage, wingman.local_time - wingman.shoot_timer}')
                 wingman.update(current_time, tick, world, all_platforms)
 
             for projectile in projectiles_group:
                 projectile.update(tick)
+            
+            for projectile in projectiles_group.copy():
+                # clearing projectiles outside the bonds, we need offset because projectiles are spawning outside of bonds
+                if projectile.rect.x + projectile.rect.width + 3*TILE_SIZE< BORDER_LEFT or projectile.rect.x - 3*TILE_SIZE > BORDER_RIGHT \
+                    or projectile.rect.y - projectile.rect.height < 0 or projectile.rect.y > SCREEN_HEIGHT:
+                    projectile.kill()
 
             for box in item_boxes_group:
                 box.update(img_list)
@@ -2291,6 +2371,7 @@ def game():
                 last_camera_coord = offset_x, offset_y 
             else:
                 offset_x, offset_y = last_camera_coord
+
             # Draw methods
             draw_background(canvas, offset_x, offset_y, background_images)
             world.draw(canvas, offset_x, offset_y)
@@ -2361,7 +2442,8 @@ def game():
             if guard:
                 guard.draw(canvas, offset_x, offset_y)
 
-            
+            pygame.draw.line(canvas, WHITE, (wingman.rect.centerx - offset_x,wingman.rect.centery- offset_y), (player.rect.centerx - offset_x, player.rect.centery - offset_y), 1)
+
             player.draw(canvas, offset_x, offset_y)
             player.draw_fish(canvas)
             player.draw_health(canvas)

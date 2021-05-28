@@ -35,7 +35,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
         elif movement[0] < 0:
             entity.rect.left = tile.right
             collision_types['left'] = True
-
+    # x coll with boxes
     hit_list = collision_not_tile(entity.rect, item_boxes)
     for box in hit_list:
         if movement[0] > 0:
@@ -59,8 +59,9 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
         # x collision with sprites
         hit_list = collision_not_tile(entity.rect, sprites)
         for sprite in hit_list:
-            if sprite.alive and not sprite.in_death_animation and not entity.invulnerability:
-                entity.hurt(False, 'sprite')
+            if sprite.alive and not sprite.in_death_animation and not entity.invulnerability and not entity.reset_invulnerability:
+                if sprite.entity_id != 8:
+                    entity.hurt(False, 'sprite')
 
     # checking collisions for Y axis
     entity.rect.y += movement[1]
@@ -112,12 +113,15 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
     if entity.entity_id == 0:
         hit_list = collision_not_tile(entity.rect, sprites)
         for sprite in hit_list:
-            if sprite.in_death_animation == False and sprite.alive:
+            if sprite.in_death_animation == False and sprite.alive and not entity.reset_invulnerability:
                 if abs((entity.rect.bottom) - sprite.rect.top) <= entity.collision_treshold:
                     if sprite.entity_id == 2:
                         entity.hurt(False)
                     else:
-                        sprite.in_death_animation = True
+                        if sprite.entity_id == 8:
+                            sprite.kill()
+                        else:
+                            sprite.in_death_animation = True
                         jump_vel = tick * -entity.jump_vel
                         if jump_vel < -entity.jump_force:
                             jump_vel = -entity.jump_force
@@ -127,9 +131,6 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
 
                 elif abs((entity.rect.top) - sprite.rect.bottom) <= entity.collision_treshold and not entity.invulnerability:
                     entity.hurt(False, 'enemy')
-                    
-
-       
 
 
     return entity.rect, collision_types

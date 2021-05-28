@@ -11,7 +11,8 @@ def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, pl
     return surface
 
 
-def draw_text(text, font, color, surface, x, y, mid):
+def draw_text(text, size, color, surface, x, y, mid):
+    font = pygame.font.Font('platformer/data/font/kenvector_future.ttf', size)
     textobj = font.render(text, 1, color)
     textrect = textobj.get_rect()
     if mid:

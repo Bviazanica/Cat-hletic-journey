@@ -1,0 +1,56 @@
+{
+    "level_1": {
+        "COLS": 50,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1
+            }
+        ]
+    },
+    "level_2": {
+        "COLS": 50,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1
+            },
+            {
+                "id": 1,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1
+            }
+        ]
+    },
+    "level_3": {
+        "COLS": 50,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1
+            }
+        ]
+    },
+    "level_4": {
+        "COLS": 100,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1
+            }
+        ]
+    },
+    "level_5": {
+        "COLS": 50,
+        "platforms": []
+    }
+}

@@ -64,7 +64,8 @@ canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 #cursor
 pygame.mouse.set_cursor(*pygame.cursors.tri_left)
 
-platforms_json_data = platforms_data()
+json_data = get_json_data()
+level_cols = json_data['level_1']['COLS']
 intro_scene = True
 tutorial = True
 # font
@@ -292,6 +293,7 @@ class CutSceneOne:
                     self.player.locked = True
                     self.friend.locked = False
                     self.new_step = False
+                    self.wingman.health_points = 1
 
                 wingman_hitbox =  pygame.Rect(
                     (self.wingman.rect.centerx - self.wingman.rect.width/3, self.wingman.rect.y, self.wingman.rect.width/3, self.wingman.rect.height))
@@ -314,7 +316,7 @@ class CutSceneOne:
                 self.wingman.rect.y -= (self.wingman.speed/2) * tick
                 self.friend.rect.topleft = self.wingman.rect.center
 
-                if (self.wingman.health_points) == 0:
+                if self.wingman.health_points == 0:
                     self.step = 2
                     self.new_step = True
                     self.text_counter = 0
@@ -855,9 +857,12 @@ def load_entity_animations():
                     elif entity_type == 'Flyingman':
                         img = pygame.transform.scale(
                             img, (TILE_SIZE ,TILE_SIZE))
+                    elif entity_type == 'Green_enemy':
+                        img = pygame.transform.smoothscale(
+                            img, (TILE_SIZE, TILE_SIZE))
                     else:
                         img = pygame.transform.scale(
-                            img, (int(img.get_width() ), int(img.get_height())))
+                            img, (TILE_SIZE, TILE_SIZE))
                     temp_list.append(img)
                 entity_animations.append(temp_list)
             else:
@@ -871,7 +876,7 @@ animations_list = load_entity_animations()
 # create empty tile list
 world_data = []
 for row in range(ROWS):
-    r = [-1] * COLS
+    r = [-1] * level_cols
     world_data.append(r)
 
 
@@ -896,12 +901,11 @@ def reset_level():
     projectiles_group.empty()
     friend_group.empty()
     guardian_group.empty()
-
     
     # create empty tile list
     data = []
     for row in range(ROWS):
-        r = [-1] * COLS
+        r = [-1] * level_cols
         data.append(r)
     return data
 
@@ -909,7 +913,9 @@ def reset_level():
 def load_level(level, img_list):
     global BORDER_LEFT
     global BORDER_RIGHT
+    global level_cols
     level += 1
+    level_cols = json_data[f'level_{level}']['COLS']
     world_data = reset_level()
     # load in level data and create world
     with open(f'platformer/data/maps/level{level}.csv', newline='') as csvfile:
@@ -983,12 +989,12 @@ class World():
                             int(len(platform) * TILE_SIZE), int(TILE_SIZE)))
 
                         self.platforms.append(Platform(
-                            platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id,level, 3*TILE_SIZE))
+                            platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id, 3*TILE_SIZE, level))
                         platform_id += 1
                         platform = []
                     elif tile == 74:
                         self.platforms.append(Platform(
-                            x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id, level,3*TILE_SIZE))
+                            x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id,3*TILE_SIZE, level))
                         platform_id += 1
                     elif tile == 110:
                         if x == 7:
@@ -1034,7 +1040,7 @@ class World():
                             'Fish', blue_fish_image, x * TILE_SIZE, y * TILE_SIZE )
                             fish_group.add(new_fish)
                     elif tile == 237:
-                        new_flyingman = Entity(8, x *TILE_SIZE, y*TILE_SIZE, 3*TILE_SIZE)
+                        new_flyingman = Entity(8, x*TILE_SIZE, y*TILE_SIZE, 3*TILE_SIZE)
                         enemies_group.add(new_flyingman)
                     elif tile == 238:  # create player
                         player = Entity(0, x * TILE_SIZE,
@@ -1042,6 +1048,7 @@ class World():
                         camera = Camera(player,SCREEN_WIDTH, SCREEN_HEIGHT)
                         camera_type = Border(
                                 camera, player, self.get_world_length())
+                                                            
                         camera.setmethod(camera_type)
                     elif tile == 239:  # create enemy
                         new_enemy = Entity(1, x * TILE_SIZE,
@@ -1157,7 +1164,7 @@ class Entity(pygame.sprite.Sprite):
         self.on_platform = False
         self.was_on_platform = False
 
-    def update(self, current_time, tick, world, all_platforms):
+    def update(self, current_time, tick, world, all_platforms, level):
         self.local_time = current_time
 
         if self.entity_id == 0:
@@ -1170,6 +1177,8 @@ class Entity(pygame.sprite.Sprite):
         if self.rect.x > world.get_world_length() or self.rect.x + self.rect.width < 0 or \
                         self.rect.y + self.rect.height < 0 or self.rect.y > SCREEN_HEIGHT:
             self.hurt(True, 'out of bonds')
+        
+        
 
         if self.in_death_animation == False:
             if self.entity_id == 0:
@@ -1180,23 +1189,29 @@ class Entity(pygame.sprite.Sprite):
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
                 self.flip = True if self.direction < 0 else False
 
-                print(f'moving: [{self.moving_left, self.moving_right}], direction: {self.direction}')
-
             elif self.entity_id == 1 or self.entity_id == 2:
                 self.set_action(int(Animation_type.Walk))
                 self.determine_movement()
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
             elif self.entity_id == 3:
-                if not self.diving:
-                    self.rect.x += self.speed * self.direction * tick # wingman
-                    if self.rect.x < BORDER_LEFT:
-                        self.rect.x = BORDER_LEFT
+                if level == 4:
+                    if self.rect.y + self.rect.height + 2*TILE_SIZE > SCREEN_HEIGHT:
+                        self.rect.y = SCREEN_HEIGHT - self.rect.height - 2*TILE_SIZE
                         self.direction *= -1
-                    elif self.rect.x + self.rect.width > BORDER_RIGHT:
-                        self.rect.x = BORDER_RIGHT - self.rect.width
+                    elif self.rect.y < 0:
+                        self.rect.y = 0
                         self.direction *= -1
-                # self.rect.y += self.speed * self.direction * tick
-                self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
+                elif level == 5:
+                    if not self.diving:
+                        self.rect.x += self.speed * self.direction * tick # wingman
+                        if self.rect.x < BORDER_LEFT:
+                            self.rect.x = BORDER_LEFT
+                            self.direction *= -1
+                        elif self.rect.x + self.rect.width > BORDER_RIGHT:
+                            self.rect.x = BORDER_RIGHT - self.rect.width
+                            self.direction *= -1
+                    # self.rect.y += self.speed * self.direction * tick
+                    self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
             elif self.entity_id == 6: #friend code
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick)
 
@@ -1334,7 +1349,7 @@ class Entity(pygame.sprite.Sprite):
             self.image = self.animation_list[self.action][self.frame_index]
             self.rect = self.image.get_rect()
             self.states = {'shoot': 'shoot', 'dive': 'dive', 'hide':'hide', 'drop':'drop'}
-            self.cooldowns = {'shoot': 5000, 'drop': 10000, 'global': 1000}
+            self.cooldowns = {'shoot': 3000, 'drop': 10000, 'global': 1000}
             self.shoot_timer = self.drop_timer = self.global_timer = -100000
             self.stunned = False
             self.stun_timer = 0
@@ -1370,26 +1385,26 @@ class Entity(pygame.sprite.Sprite):
                 new_desired_vector.normalize_ip()
                 new_projectile = Projectile(self.rect.centerx, self.rect.bottom, speed, new_desired_vector, 1)
                 projectiles_group.add(new_projectile)
-                
                 spread -= 20
 
     def drop(self, stage, position):
         self.dropped += 1
         self.drop_timer = self.local_time
         if stage == 1:
-            new_entity = Entity(1, position[0], position[1], 2*TILE_SIZE)
+            new_entity = Entity(1, position[0], position[1], 4*TILE_SIZE)
             enemies_group.add(new_entity)
             
         elif stage == 3:
-            choice = random.choice(['snake','green_enemy','flyingman'])
-            if choice == 'snake':
+            choice = random.randrange(0, 10)
+            print(f'boss fight drop: {choice}')
+            if choice < 3:
                 new_entity = Snake(4, position[0], position[1])
                 snakes_group.add(new_entity)
-            elif choice == 'green_enemy':
-                new_entity = Entity(1, position[0], position[1], 2*TILE_SIZE)
-                enemies_group.add(new_entity)
-            elif choice == 'flyingman':
+            elif choice < 6:
                 new_entity = Entity(8, position[0], position[1], 3*TILE_SIZE)
+                enemies_group.add(new_entity)
+            elif choice < 10:
+                new_entity = Entity(1, position[0], position[1], 4*TILE_SIZE)
                 enemies_group.add(new_entity)
             
 
@@ -1507,7 +1522,7 @@ class Entity(pygame.sprite.Sprite):
 
     def draw_health(self, canvas):
         for x in range(self.health_points):
-            canvas.blit(health_image, (TILE_SIZE + x*TILE_SIZE + x*TILE_SIZE//8, SCREEN_HEIGHT - health_image.get_height()))
+            canvas.blit(health_image, (TILE_SIZE/4 + x*TILE_SIZE + x*TILE_SIZE//8, SCREEN_HEIGHT - health_image.get_height()))
 
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
@@ -1557,7 +1572,7 @@ class PlatformPart(pygame.sprite.Sprite):
 
 
 class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, parts, surface, id, level, speed):
+    def __init__(self, x, y, parts, surface, id,speed, level):
         pygame.sprite.Sprite.__init__(self)
         self.platform_id = id
         self.parts = parts
@@ -1571,7 +1586,7 @@ class Platform(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
 
-        self.move_x, self.move_y, self.direction = self.determine_movement_by_id(level)
+        self.move_x, self.move_y, self.direction = self.determine_movement_by_id(id, level)
 
     def update(self, world, tick):
         dx = 0
@@ -1617,8 +1632,8 @@ class Platform(pygame.sprite.Sprite):
             # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
                                                 #    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
-    def determine_movement_by_id(self,level):
-        data = platforms_json_data[f'level_{2}'][4]
+    def determine_movement_by_id(self,id, level):
+        data = json_data[f'level_{level}']['platforms'][id]
         return data['move_x'],data['move_y'],data['direction']
 
 class Item(pygame.sprite.Sprite):
@@ -1684,10 +1699,14 @@ class Water(pygame.sprite.Sprite):
         canvas.blit(self.image, (round(self.rect.x - offset_x),
                                  round(self.rect.y-offset_y)))
 
-    def collide_water(self, target):
+    def collide_water(self, target, level):
         if pygame.sprite.collide_rect(self, target):
             target.hurt(False, 'wata')
+            if level == 4 and target.entity_id == 0:
+                return True
+              
 
+        
 class ItemBox(pygame.sprite.Sprite):
     def __init__(self, img, x, y, hits_to_break):
         pygame.sprite.Sprite.__init__(self)
@@ -2174,14 +2193,14 @@ def game():
     game_finished = False
     boss_fight = False
     start_fight = False
-    new_stage = True
+    new_stage = False
     stage = 0
     current_time = 0
     timer = 0
     counter = 0
+    new_camera = False
 
     last_camera_coord = 0.0,0.0
-
 
     health_image = pygame.transform.smoothscale(
             health_image, (TILE_SIZE, TILE_SIZE))
@@ -2202,7 +2221,7 @@ def game():
     fake_platform_green, fake_ground_green = return_images_from_list(random_images)
     world, player, camera, all_platforms, invisible_blocks, \
     level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
-        4, img_list)
+        1, img_list)
     # Game loop.
     while running:
         time_per_frame = Clock.tick(FPS)
@@ -2279,42 +2298,63 @@ def game():
             else:
                 player.set_action(int(Animation_type.Idle))
 
-        
-        if level == 5 and stage == 0 and start_fight:
-            stage = 1
-            boss_fight = True
-            new_stage = True
-            BORDER_LEFT, BORDER_RIGHT = 0 + last_camera_coord[0], 0 + last_camera_coord[0] + SCREEN_WIDTH
-            
-
-        if boss_fight and new_stage and stage == 1:
-            camera = None
-            print("camera non")
-
-        elif not boss_fight and new_stage and stage == 4:
-            BORDER_LEFT, BORDER_RIGHT = 0, world.get_world_length()
-            camera = Camera(player,SCREEN_WIDTH, SCREEN_HEIGHT)
-            camera_type = Border(camera, player, world.get_world_length())
-            camera.setmethod(camera_type)
+        if level == 4 and new_stage:
             new_stage = False
-            print('new cam')
+            camera_type = Auto(camera, player)
+            camera.setmethod(camera_type)
+            new_camera = True
+
+        elif level == 5:
+            if stage == 0 and start_fight:
+                stage = 1
+                boss_fight = True
+                new_stage = True
+                BORDER_LEFT, BORDER_RIGHT = 0 + last_camera_coord[0], 0 + last_camera_coord[0] + SCREEN_WIDTH
+        
+            if boss_fight and new_stage and stage == 1:
+                camera = None
+                print("camera non")
+            
+            elif not boss_fight and new_stage and stage == 4:
+                BORDER_LEFT, BORDER_RIGHT = 0, world.get_world_length()
+                camera = Camera(player,SCREEN_WIDTH, SCREEN_HEIGHT)
+                camera_type = Border(camera, player, world.get_world_length())
+                camera.setmethod(camera_type)
+                new_stage = False
+                new_camera = True
+                print('new cam')
 
         if player.alive:
             # Update methods
-            player.update(current_time, tick,  world, all_platforms)
+            player.update(current_time, tick,  world, all_platforms, level)
             cut_scene_manager.update(current_time, tick)
             for platform in all_platforms:
                 platform.update(world, tick)
 
             for enemy in enemies_group:
-                enemy.update(current_time, tick, world, all_platforms)
+                enemy.update(current_time, tick, world, all_platforms,level)
                 if enemy.entity_id == 8:
                     enemy.ai(player, tick)
 
             if guard:
-                guard.update(current_time, tick, world, all_platforms)
+                guard.update(current_time, tick, world, all_platforms,level)
 
             if wingman:
+                if level == 4:
+                    if player.rect.x + player.rect.width < camera.offset.x and not player.in_death_animation:
+                        player.hurt(True, 'Border')
+                        camera.offset.x = 0
+                        projectiles_group.empty()
+                    if player.rect.x + player.rect.width + 20*TILE_SIZE> world.get_world_length():
+                        wingman.rect.x += wingman.speed*3 * tick
+                    else:
+                        wingman.rect.x = round(camera.offset.x) + SCREEN_WIDTH - wingman.rect.width
+                    if new_camera:
+                        wingman.rect.y += wingman.speed * wingman.direction * tick
+                        if abs(wingman.rect.y - player.rect.y) < TILE_SIZE and wingman.local_time - \
+                             wingman.shoot_timer > wingman.cooldowns['shoot']:
+                            wingman.shoot('basic', 5*TILE_SIZE, Vector2(-1,0))
+
                 if level == 5:
                     if stage == 0 and new_stage:
                         new_stage = False
@@ -2436,12 +2476,15 @@ def game():
                                 dy = 0
                             wingman.rect.y += dy
                 # print(f'dropped: {wingman.dropped}, shot: {wingman.shot}, dive: {wingman.diving}, stun time: {wingman.stun_timer}, stun: {wingman.stunned}')
-                wingman.update(current_time, tick, world, all_platforms)
+                wingman.update(current_time, tick, world, all_platforms,level)
 
             elif boss_fight and stage == 3:
                 boss_fight = False
                 new_stage = True
                 stage = 4
+                for snake in snakes_group:
+                    snake.new_state = True
+                    snake.state = snake.states['Disappear']
 
             for projectile in projectiles_group:
                 projectile.update(current_time,tick)
@@ -2461,27 +2504,32 @@ def game():
             for box in item_boxes_group:
                 box.update(img_list)
                 if box.destroy:
+                    choice = random.random()
+                    print(choice)
                     #spawn item
-                    if random.random() > 0.05:
-                        choice = random.choice(['Bubble', 'Health', 'Boost', 'Spikeman', 'Snake', 'Green_enemy'])
-                        if choice == 'Bubble':
-                            new_item = Item(bubble_item_image, choice, box.rect.x, box.rect.y)
-                            items_group.add(new_item)
-                        elif choice == 'Health':
-                            new_item = Item(health_item_image, choice, box.rect.x, box.rect.y)
-                            items_group.add(new_item)
-                        elif choice == 'Boost':
-                            new_item = Item(boost_item_image,  choice, box.rect.x, box.rect.y)
-                            items_group.add(new_item)
-                        elif choice == 'Spikeman':
-                            new_spikeman = Entity(2,  box.rect.x, box.rect.top, 3*TILE_SIZE)
-                            enemies_group.add(new_spikeman)
-                        elif choice == 'Snake':
-                            new_snake = Snake(4, box.rect.x, box.rect.top)
-                            snakes_group.add(new_snake)
-                        elif choice == 'Green_enemy':
-                            new_enemy = Entity(1, box.rect.x, box.rect.top, 3*TILE_SIZE)
-                            enemies_group.add(new_enemy)
+                    if choice < 0.15:
+                        new_item = Item(bubble_item_image, choice, box.rect.x, box.rect.y)
+                        items_group.add(new_item)
+                    elif choice < 0.30:
+                        new_item = Item(health_item_image, choice, box.rect.x, box.rect.y)
+                        items_group.add(new_item)
+                    elif choice  < 0.45:
+                        new_item = Item(boost_item_image,  choice, box.rect.x, box.rect.y)
+                        items_group.add(new_item)
+                    elif choice  < 0.55:
+                        new_spikeman = Entity(2,  box.rect.x, box.rect.top, 3*TILE_SIZE)
+                        enemies_group.add(new_spikeman)
+                    elif choice  < 0.65:
+                        new_snake = Snake(4, box.rect.x, box.rect.top)
+                        snakes_group.add(new_snake)
+                    elif choice  < 0.75:
+                        new_enemy = Entity(1, box.rect.x, box.rect.top, 3*TILE_SIZE)
+                        enemies_group.add(new_enemy)
+                    elif choice < 0.8:
+                        img = random.choice(animations_list[5][2])
+                        new_fish = Collectible(
+                            'Fish', img, box.rect.x, box.rect.top)
+                        fish_group.add(new_fish)
                         
                     box.kill()
 
@@ -2495,7 +2543,9 @@ def game():
                         start_fight = True
                         player.checkpoint_position = checkpoint.rect.centerx, checkpoint.rect.y + TILE_SIZE - player.rect.height
                         
-                
+                elif level == 4:
+                    if not new_camera and checkpoint.active == False:
+                        new_stage = True
 
             for lever in levers_group:
                 lever.update(current_time, snakes_group)
@@ -2508,8 +2558,8 @@ def game():
 
             if friend:
                 in_cage = simple_collision_check(friend, cages_group)
-                friend.update(current_time, tick, world, all_platforms)
-                if friend.locked == True and level == 5 and in_cage:
+                friend.update(current_time, tick, world, all_platforms,level)
+                if level == 5 and friend.locked == True  and in_cage:
                     friend.rect.x = friend.x - friend.rect.width//2
                     friend.rect.bottom = friend.y - friend.rect.height*0.1
                     friend.flip = True
@@ -2531,7 +2581,11 @@ def game():
             
             # adjust camera to player
             if bool(camera):
-                camera.scroll()
+                if level == 4 and new_camera and not player.in_death_animation:
+                    camera.offset.x += 4*TILE_SIZE * tick 
+                else:
+                    camera.scroll()
+
                 offset_x, offset_y = camera.offset.x, camera.offset.y
                 last_camera_coord = offset_x, offset_y 
             else:
@@ -2585,7 +2639,11 @@ def game():
                 wingman.draw(canvas, offset_x, offset_y)
 
             for water in water_group:
-                water.collide_water(player)
+                collision = water.collide_water(player, level)
+                if collision:
+                    camera.offset.x = 0
+                    projectiles_group.empty()
+                    print('col')
                 water.draw(canvas, offset_x, offset_y)
 
             for fish in fish_group:

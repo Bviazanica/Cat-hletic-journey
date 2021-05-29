@@ -2,9 +2,9 @@
 # json file
 import json
   
-def platforms_data():
-    f = open('platformer/data/platforms.json',)
+def get_json_data():
+    f = open('platformer/data/map_data.json',)
     data = json.load(f)
     f.close()
 
-    return data['platforms']
+    return data

@@ -32,8 +32,6 @@ class CamScroll(ABC):
         pass
 
 # camera which follows player
-
-
 class Follow(CamScroll):
     def __init__(self, camera, player):
         CamScroll.__init__(self, camera, player)
@@ -47,7 +45,6 @@ class Follow(CamScroll):
             self.camera.offset_float.x), int(self.camera.offset_float.y)
 
 # camera which follows player, but can go to edges
-
 class Border(CamScroll):
     def __init__(self, camera, player, map_length):
         CamScroll.__init__(self, camera, player)
@@ -80,4 +77,4 @@ class Auto(CamScroll):
         CamScroll.__init__(self, camera, player)
 
     def scroll(self):
-        self.camera.offset.x += 1
+        pass

@@ -3,7 +3,6 @@ import math
 from abc import ABC, abstractmethod
 vec = pygame.math.Vector2
 
-
 class Camera:
     def __init__(self, player, screen_width, screen_height):
         self.player = player
@@ -20,8 +19,6 @@ class Camera:
         self.method.scroll()
 
 # abstract base class for camera
-
-
 class CamScroll(ABC):
     def __init__(self, camera, player):
         self.camera = camera

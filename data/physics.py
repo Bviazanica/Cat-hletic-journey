@@ -19,7 +19,7 @@ def apply_gravitation(current_vel, GRAVITY, tick, GRAVITY_FORCE_LIMIT):
         current_vel = GRAVITY_FORCE_LIMIT
     return current_vel
 
-def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks, item_boxes, tick):
+def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_blocks, item_boxes,sfx_dic, tick):
     # we can treat platforms and tiles as same collision type
     collision_types = {'top': False, 'bottom': False, 
                        'right': False, 'left': False, 'bottom-platform': False, 'invisible-block-top': False ,'item-box-top': False}
@@ -84,6 +84,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
             block.visible = True
             collision_types['invisible-block-top'] = True
 
+    # y collision with itemboxes
     hit_list = collision_not_tile(entity.rect, item_boxes)
     for box in hit_list:
         if movement[1] < 0:
@@ -91,6 +92,12 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
             if entity.entity_id == 0:
                 box.hits_to_break -= 1
                 box.new_state = True
+                if box.hits_to_break == 1:
+                    sfx_dic['box_hit'].play()
+                    print('hit')
+                else:
+                    sfx_dic['box_break'].play()
+                    print('break')
             collision_types['item-box-top'] = True
             
         elif movement[1] > 0:
@@ -116,12 +123,13 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
             if sprite.in_death_animation == False and sprite.alive and not entity.reset_invulnerability:
                 if abs((entity.rect.bottom) - sprite.rect.top) <= entity.collision_treshold:
                     if sprite.entity_id == 2:
-                        entity.hurt(False, player)
+                        entity.hurt(False, 'player')
                     else:
                         if sprite.entity_id == 8:
                             sprite.kill()
                         else:
                             sprite.in_death_animation = True
+                        sfx_dic['bounce'].play()
                         jump_vel = tick * -entity.jump_vel
                         if jump_vel < -entity.jump_force:
                             jump_vel = -entity.jump_force

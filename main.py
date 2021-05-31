@@ -1,11 +1,10 @@
-from hashlib import new
 import pygame
-import math
 import sys
 import os
 import csv
 import random
 from pygame import Vector2
+from pygame import mouse
 from pygame.locals import *
 from data.button import Button
 from data.camera.camera import *
@@ -15,11 +14,14 @@ from enum import IntEnum
 from data.json_reader import *
 from data.cut_scenes import *
 from data.globals import *
+from data.sound_handler import *
 
 vec = pygame.math.Vector2
 
+mixer.init()
 pygame.init()
-
+pygame.mixer.music.set_volume(0.5)
+music_handler = SoundHandler()
 Clock = pygame.time.Clock()
 FPS = 60
 SCREEN_WIDTH = 800
@@ -44,6 +46,7 @@ YELLOW = (255, 255, 0)
 DARKGRAY = (40, 40, 40)
 
 class Animation_type(IntEnum):
+
     Death = 0,
     Fall = 1,
     Idle = 2,
@@ -60,10 +63,11 @@ monitor_size = [pygame.display.Info().current_w,pygame.display.Info().current_h]
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-
 #cursor
 pygame.mouse.set_cursor(*pygame.cursors.tri_left)
 
+sfx_dic = load_sounds()
+music_list = load_music_names()
 json_data = get_json_data()
 level_cols = json_data['level_1']['COLS']
 intro_scene = True
@@ -74,12 +78,26 @@ blue_fish_image = pygame.image.load(
 
 dead_fish = load_images('entities/Dead_fish')
 
-print(len(dead_fish))
 cloud_image = pygame.image.load(
     f'platformer/data/images/entities/Cloud/cloud.png').convert_alpha()
 
 button_clicked = pygame.image.load(
     f'platformer/data/images/interface/button_1.png').convert_alpha()
+slider_line = pygame.image.load(
+    f'platformer/data/images/interface/slider_line.png').convert_alpha()
+green_slider_down = pygame.image.load(
+    f'platformer/data/images/interface/green_slider_down.png').convert_alpha()
+sound_on = pygame.image.load(
+    f'platformer/data/images/interface/sound_on.png').convert_alpha()
+sound_off = pygame.image.load(
+f'platformer/data/images/interface/sound_off.png').convert_alpha()
+toggle_on = pygame.image.load(
+    f'platformer/data/images/interface/toggle_on.png').convert_alpha()
+toggle_off = pygame.image.load(
+    f'platformer/data/images/interface/toggle_off.png').convert_alpha()
+
+toggle_on = pygame.transform.smoothscale(toggle_on, (TILE_SIZE*2, TILE_SIZE))
+toggle_off = pygame.transform.smoothscale(toggle_off, (TILE_SIZE*2, TILE_SIZE))
 
 fake_platform_green = pygame.image.load(
     f'platformer/data/images/tiles/68.png').convert_alpha()
@@ -188,6 +206,7 @@ class Tutorial:
         enter = pressed[pygame.K_RETURN]
         self.player.set_action(int(Animation_type.Idle))
         if enter  and self.current_time - self.started_time > 1000:
+            sfx_dic['skip'].play()
             self.cut_scene_running = False
             self.player.locked = False
         else:
@@ -229,22 +248,24 @@ class Tutorial:
             if self.step == 0:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/2,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    True
+                    'midtop',
+                    TILE_SIZE
                 )
             if self.step == 1:
                 draw_text(
                     self.text['two'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/2,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    True
+                    'midtop',
+                    TILE_SIZE
                 )
 
 class CutSceneOne:
@@ -267,6 +288,8 @@ class CutSceneOne:
         self.text = {
             'one': "I must save him!...",
         }
+        self.last_sound_played = 0
+        self.last_text_counter = 0
         self.text_counter = 0
         self.time_in_scene = 0
 
@@ -275,7 +298,9 @@ class CutSceneOne:
         
         pressed = pygame.key.get_pressed()
         enter = pressed[pygame.K_RETURN]
+        self.last_text_counter = self.text_counter
         if enter:
+            sfx_dic['skip'].play()
             self.cut_scene_running = False
             exit = random.choice(exit_group.sprites())
             self.player.rect.x = exit.rect.x
@@ -341,15 +366,23 @@ class CutSceneOne:
 
     def draw(self, canvas):
         if self.dialogue_in_progress:
+            if round(self.text_counter) % 2 == 0 and round(self.text_counter) != round(self.last_text_counter):
+                    if self.last_sound_played != 1:
+                        sfx_dic['talk_1'].play()
+                        self.last_sound_played = 1
+                    else:
+                        sfx_dic['talk_2'].play()
+                        self.last_sound_played = 2
             if self.step == 2:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    False
+                    'topleft',
+                    TILE_SIZE
                 )
 
 class CutSceneTwo:
@@ -373,6 +406,8 @@ class CutSceneTwo:
             'two-option-1': "You can go on...",
             'two-option-2': "You didn't bring enough..."
         }
+        self.last_sound_played = 0
+        self.last_text_counter = 0
         self.text_counter = 0
         self.time_in_scene = 0
 
@@ -381,6 +416,7 @@ class CutSceneTwo:
         pressed = pygame.key.get_pressed()
         enter = pressed[pygame.K_RETURN]
         if enter:
+            sfx_dic['skip'].play()
             self.cut_scene_running = False
             if self.player.fish >= 40:
                 exit = random.choice(exit_group.sprites())
@@ -390,6 +426,7 @@ class CutSceneTwo:
                 self.player.alive = False
                 self.player.health_points = 0
 
+        self.last_text_counter = self.text_counter
         if self.step == 0:
             if self.new_step:
                 self.player.set_action(int(Animation_type.Idle))
@@ -471,35 +508,45 @@ class CutSceneTwo:
 
     def draw(self, canvas):
         if self.dialogue_in_progress:
+            if round(self.text_counter) % 2 == 0 and round(self.text_counter) != round(self.last_text_counter):
+                    if self.last_sound_played != 1:
+                        sfx_dic['talk_1'].play()
+                        self.last_sound_played = 1
+                    else:
+                        sfx_dic['talk_2'].play()
+                        self.last_sound_played = 2
             if self.step == 1:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    False
+                    'topleft',
+                    TILE_SIZE
                 )
             elif self.step == 2 and self.player.fish >= 40:
                 draw_text(
                     self.text['two-option-1'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    False
+                    'topleft',
+                    TILE_SIZE
                 )
             elif self.step == 2 and self.player.fish < 40:
                 draw_text(
                     self.text['two-option-2'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    False
+                    'topleft',
+                    TILE_SIZE
                 )
 
 class FinalCutScene:
@@ -530,6 +577,8 @@ class FinalCutScene:
             'five': "Game by:",
             'six': "Branislav Viazanica"
         }
+        self.last_sound_played = 0
+        self.last_text_counter = 0
         self.text_counter = 0
         self.time_in_scene = 0
 
@@ -537,7 +586,12 @@ class FinalCutScene:
         self.current_time = time_passed
         pressed = pygame.key.get_pressed()
         enter = pressed[pygame.K_RETURN]
+        if enter:
+            sfx_dic['skip'].play()
+            self.new_step = True
+            self.step = 5
 
+        self.last_text_counter = self.text_counter
         if self.step == 0:
             if self.new_step:
                 self.new_step = False
@@ -545,7 +599,6 @@ class FinalCutScene:
                 self.player.moving_left = self.player.moving_right = False
                 self.player.set_action(int(Animation_type.Idle))
                 
-            
             if self.current_time - self.started_time > 2000:
                 self.new_step = True
                 self.step = 1
@@ -680,66 +733,81 @@ class FinalCutScene:
 
     def draw(self, canvas):
         if self.dialogue_in_progress:
+            if round(self.text_counter) % 2 == 0 and round(self.text_counter) != round(self.last_text_counter) \
+                and self.step < 6:
+                    if self.last_sound_played != 1:
+                        sfx_dic['talk_1'].play()
+                        self.last_sound_played = 1
+                    else:
+                        sfx_dic['talk_2'].play()
+                        self.last_sound_played = 2
             if self.step == 2:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    False
+                    'topleft',
+                    TILE_SIZE
                 )
             if self.step == 3:
                 draw_text(
                     self.text['two'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    False
+                    'topleft',
+                    TILE_SIZE
                 )
             if self.step == 4:
                 draw_text(
                     self.text['three'][0:int(self.text_counter)],
-                    22,
+                    40,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
                     SCREEN_HEIGHT - SCREEN_HEIGHT*0.08,
-                    False
+                    'topleft', 
+                    TILE_SIZE
                 )
         elif self.game_finished:
             if self.step == 6:
                 draw_text(
                         self.text['four'][0:int(self.text_counter)],
-                        35,
+                        70,
                         WHITE,
                         canvas,
                         SCREEN_WIDTH/2,
                         SCREEN_HEIGHT/2,
-                        True
+                        'midtop', 
+                        TILE_SIZE
                 )
                 
             elif self.step == 7:
                 draw_text(
                         self.text['five'][0:int(self.text_counter)],
-                        35,
+                        70,
                         WHITE,
                         canvas,
                         SCREEN_WIDTH/2,
                         SCREEN_HEIGHT/2 - SCREEN_HEIGHT*0.05,
-                        True
+                        'midtop', 
+                        TILE_SIZE
                 )
                 draw_text(
                         self.text['six'][0:int(self.text_counter)],
-                        35,
+                        70,
                         WHITE,
                         canvas,
                         SCREEN_WIDTH/2,
                         SCREEN_HEIGHT/2 + SCREEN_HEIGHT*0.05,
-                        True
+                        'midtop', 
+                        TILE_SIZE
+                        
                 )
             if self.start_to_dim:
                     canvas.blit(self.dim_screen, (0, 0))
@@ -1268,6 +1336,7 @@ class Entity(pygame.sprite.Sprite):
                     if abs((self.rect.bottom) - wingman.hitbox.top) <= self.collision_treshold and (self.rect.x + self.rect.width >= wingman.hitbox.x) and (self.rect.x <= wingman.hitbox.x + wingman.hitbox.width):
                         if wingman.stunned == True and self.vel_y > 0 and not self.reset_invulnerability:
                             wingman.hurt(False, 'player')
+                            sfx_dic['bounce'].play()
                             jump_vel = tick * -self.jump_vel
                             if jump_vel < -self.jump_force:
                                 jump_vel = -self.jump_force
@@ -1315,7 +1384,7 @@ class Entity(pygame.sprite.Sprite):
         
         #apply collisions to movement
         self.rect, colls = move_with_collisions(
-            self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, tick)
+            self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group,sfx_dic, tick)
         
         #events after collision are set
         if colls['bottom'] or colls['bottom-platform']:
@@ -1390,10 +1459,12 @@ class Entity(pygame.sprite.Sprite):
         self.shoot_timer = self.local_time
         self.shot += 1
         if pattern == 'basic':
+            sfx_dic['shoot'].play()
             new_projectile = Projectile(self.rect.centerx, self.rect.bottom, speed, desired, 1)
             projectiles_group.add(new_projectile)
         elif pattern == 'spray':
             spread = 20
+            sfx_dic['shoot_1'].play()
             for i in range(3):
                 new_desired_vector = desired.rotate(spread)
                 new_desired_vector.normalize_ip()
@@ -1405,17 +1476,17 @@ class Entity(pygame.sprite.Sprite):
     def drop(self, stage, position):
         self.dropped += 1
         self.drop_timer = self.local_time
+        sfx_dic['drop'].play()
         if stage == 1:
             new_entity = Entity(1, position[0], position[1], 4*TILE_SIZE)
             enemies_group.add(new_entity)
             
         elif stage == 3:
             choice = random.randrange(0, 10)
-            print(f'boss fight drop: {choice}')
             if choice < 3:
                 new_entity = Snake(4, position[0], position[1])
                 snakes_group.add(new_entity)
-            elif choice < 6:
+            elif choice < 3:
                 new_entity = Entity(8, position[0], position[1], 3*TILE_SIZE)
                 enemies_group.add(new_entity)
             elif choice < 10:
@@ -1424,6 +1495,7 @@ class Entity(pygame.sprite.Sprite):
             
     #after player is damaged, resets position to checkpoint
     def reset_position(self, position):
+        sfx_dic['reset_position'].play()
         self.rect.x = round(position[0])
         self.rect.y = round(position[1])
         self.reset_invulnerability_time = self.local_time
@@ -1450,18 +1522,29 @@ class Entity(pygame.sprite.Sprite):
                     if self.entity_id != 3:
                         self.in_death_animation = True
                         self.health_points -= 1
+                        if self.entity_id == 0:
+                            sfx_dic['death'].play()
+                        else:
+                            sfx_dic['hit'].play()
                     else:
                         self.health_points -= 1
+                        sfx_dic['hit'].play()
                 else:
                     self.health_points -= 1
                     self.reset_position(self.checkpoint_position)
+
             else:
                 self.health_points -= 1
                 if not out_of_bounds:
                     if self.entity_id == 3:
                         self.kill()
+                        sfx_dic['hit'].play()
                     else:
                         self.in_death_animation = True
+                        if self.entity_id == 0:
+                            sfx_dic['death'].play()
+                        else:
+                            sfx_dic['hit'].play()
                 else:
                     if self.entity_id != 0:
                         self.kill()
@@ -1494,6 +1577,7 @@ class Entity(pygame.sprite.Sprite):
     def use(self, possible_use_item_list, snake_group, cage_group, current_time):
         for item in possible_use_item_list:
             if self.rect.colliderect(item.rect):
+                sfx_dic['use'].play()
                 if item.lever_type == 'green':
                     if item.activated:
                         item.action(snake_group, 'Appear')
@@ -1518,11 +1602,12 @@ class Entity(pygame.sprite.Sprite):
                 
             canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
                                                                                 offset_x - TILE_SIZE//2), round(self.rect.y -
-                                                                                                    offset_y - TILE_SIZE//4)))
-            
+                                                                                                    offset_y - TILE_SIZE//4)))                                                                             
         else:
             canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
-                                                                                offset_x), round(self.rect.y - offset_y)))                                                                                            
+                                                                                offset_x), round(self.rect.y - offset_y)))  
+        pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
+                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                                                                                                      
         # bubble rect on player                                                                                
         if self.entity_id == 0:
             bubble_rect = bubble_image.get_rect()
@@ -1563,7 +1648,6 @@ class Entity(pygame.sprite.Sprite):
                     self.action = int(Animation_type.Idle)
                     self.in_death_animation = False
                     self.frame_index = 0
-                    
                 else:
                     if self.entity_id != 0:
                         self.kill()
@@ -1676,7 +1760,7 @@ class Item(pygame.sprite.Sprite):
             self.kill()
 
         self.rect, colls = move_with_collisions(
-                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, tick)
+                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, sfx_dic,tick)
 
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
@@ -1722,7 +1806,7 @@ class Water(pygame.sprite.Sprite):
 
     def collide_water(self, target, level):
         if pygame.sprite.collide_rect(self, target):
-            target.hurt(False, 'wata')
+            target.hurt(False, 'water')
             if level == 4 and target.entity_id == 0:
                 return True
               
@@ -1771,6 +1855,7 @@ class Collectible(pygame.sprite.Sprite):
     def collect(self, player):
         if pygame.sprite.collide_rect(self, player):
             if self.type == 'Fish':
+                sfx_dic['collect'].play()
                 player.fish += 1
                 self.kill()
 
@@ -1994,6 +2079,7 @@ class Snake(pygame.sprite.Sprite):
             if self.rect.colliderect(player.rect) and not player.invulnerability and \
                  not player.reset_invulnerability and not player.in_death_animation:
                 self.state = self.states['Attack']
+                sfx_dic['snake_hit'].play()
                 self.new_state = True
 
             self.flip = True if player.rect.center > self.rect.center else False
@@ -2012,7 +2098,7 @@ class Snake(pygame.sprite.Sprite):
                     player.hurt(False, 'Snake')
 
             self.rect, colls = move_with_collisions(
-                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, tick)
+                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group,sfx_dic, tick)
             self.update_animation()
 
 
@@ -2067,6 +2153,7 @@ class Checkpoint(pygame.sprite.Sprite):
         if self.rect.colliderect(player.rect) and self.active:
             player.checkpoint_position = vec(
                 self.rect.centerx, self.rect.y + TILE_SIZE - player.rect.height)
+            sfx_dic['checkpoint'].play()
             for checkpoint in checkpoints_group:
                 if checkpoint.rect.x < self.rect.x:
                     checkpoint.active = False
@@ -2074,7 +2161,7 @@ class Checkpoint(pygame.sprite.Sprite):
                     self.active = False
                     break
 
-    def draw(self, canvas, offset_x, offset_y):
+    def draw(self, canvas, offset_x, offset_y, level):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
         
@@ -2084,9 +2171,14 @@ class Checkpoint(pygame.sprite.Sprite):
                 is_lowest_id = False
         
         if is_lowest_id:
-            draw_text('start', 10 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, True)
+            if level != 5 and level != 4:
+                draw_text('start', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
+            elif level == 4:
+                draw_text('Run!', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
+            elif level == 5:
+                draw_text('careful', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
         else:
-            draw_text('checkpoint', 10 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, True)
+            draw_text('checkpoint', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
         pygame.draw.rect(canvas, RED,
                          (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
     
@@ -2193,7 +2285,8 @@ class Lever(pygame.sprite.Sprite):
             for member in group:
                 member.is_open = state
                 member.new_state = True
-    
+
+
 #main game function                      
 def game():
     # needed variables
@@ -2237,9 +2330,10 @@ def game():
 
     running = True
     game_finished = False
+    game_over = False
     boss_fight = False
     start_fight = False
-    new_stage = False
+    new_stage = True
     stage = 0
     current_time = 0
     timer = 0
@@ -2289,6 +2383,9 @@ def game():
             tick = 0.2
 
         if player.alive == False:
+            if game_over == False:
+                sfx_dic['death_screen'].play()
+            game_over = True
             world, player, camera, all_platforms, invisible_blocks, level \
                = game_over_menu(player,level, img_list)
 
@@ -2318,6 +2415,7 @@ def game():
                         player.direction = 1
                     if event.key == pygame.K_w and player.alive and player.jump == False and not player.in_death_animation:
                         if player.air_timer < 10:
+                            sfx_dic['jump_2'].play()
                             jump_vel = tick * -player.jump_vel
                             if jump_vel < -player.jump_force:
                                 jump_vel = -player.jump_force
@@ -2414,6 +2512,7 @@ def game():
                     if stage == 0 and new_stage:
                         new_stage = False
                         wingman.speed = 0
+                        
 
                     if stage == 1:
                         if new_stage:
@@ -2466,6 +2565,7 @@ def game():
                             wingman.speed = 0
                             
                         if current_time - timer > 1500 and counter < 6:
+                            sfx_dic['shoot'].play()
                             counter += 1
                             timer = current_time
                             skip = random.choice([0,1,2])
@@ -2484,7 +2584,7 @@ def game():
                                     continue
                                 projectile = Projectile(spawn_x, SCREEN_HEIGHT - 5*TILE_SIZE - TILE_SIZE*i*2 *helper_multiplier, 6*TILE_SIZE, Vector2(1,0), direction)
                                 projectiles_group.add(projectile)
-                    
+
                         elif counter >= 6 and bool(projectiles_group) == False:
                             stage = 3
                             new_stage = True
@@ -2626,6 +2726,7 @@ def game():
                     all_platforms.pop(all_platforms.index(platform))
 
             if pygame.sprite.spritecollide(player, exit_group, False):
+                sfx_dic['level_complete'].play()
                 level_complete = True
             
             # adjust camera to player
@@ -2654,7 +2755,7 @@ def game():
                 spike.draw(canvas, offset_x, offset_y)
 
             for checkpoint in checkpoints_group:
-                checkpoint.draw(canvas, offset_x, offset_y)
+                checkpoint.draw(canvas, offset_x, offset_y, level)
 
             for box in item_boxes_group:
                 box.draw(canvas, offset_x, offset_y)
@@ -2695,7 +2796,6 @@ def game():
                 if collision:
                     camera.offset.x = 0
                     projectiles_group.empty()
-                    print('col')
                 water.draw(canvas, offset_x, offset_y)
 
             for fish in fish_group:
@@ -2759,15 +2859,16 @@ def game_over_menu(player, level, img_list):
     level = None
     clickable = True
     x = 0
+    texts = ['Restart', 'Back to menu']
     number_of_buttons = 2
     buttons = []
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, 'menu', button_clicked, x)
+                        x*button_clicked.get_height()*2, 'menu', texts[x],button_clicked, x)
         buttons.append(button)
 
     for button in buttons:
-        if button.draw(canvas):
+        if button.draw(canvas, TILE_SIZE):
             if clickable:
                 if button.button_id == 0:
                     world_data = reset_level()
@@ -2783,12 +2884,15 @@ def game_over_menu(player, level, img_list):
 
 #main menu
 def main_menu():
+    pygame.mixer.music.load(f'platformer/data/sounds/music/{music_list[0]}')
+    pygame.mixer.music.play(-1, 0.0, 2500)
+    texts = ['Start', 'Settings', 'Credits', 'Quit']
     x = 0
     number_of_buttons = 4
     buttons = []
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//10 +
-                        x*button_clicked.get_height()*2, 'menu', button_clicked, x)
+                        x*button_clicked.get_height()*2, 'menu', texts[x], button_clicked, x)
         buttons.append(button)
     running = True
     clickable = False
@@ -2805,7 +2909,7 @@ def main_menu():
 
         for button in buttons:
             button.rect.centerx = SCREEN_WIDTH//2
-            if button.draw(canvas):
+            if button.draw(canvas, TILE_SIZE):
                 if clickable:
                     if button.button_id == 0:
                         clickable = False
@@ -2840,17 +2944,18 @@ def show_credits():
                 if event.key == K_ESCAPE:
                     running = False
         draw_text('Credits', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, True)
+                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
 #settings
 def settings():
-    number_of_buttons = 2
+    number_of_buttons = 3
     buttons = []
+    texts = ['Audio', 'Resolution', 'Controls']
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, 'menu', button_clicked, x)
+                        x*button_clicked.get_height()*2, 'menu',texts[x], button_clicked, x)
         buttons.append(button)
     running = True
     clickable = False
@@ -2865,15 +2970,17 @@ def settings():
                     running = False
         for button in buttons:
             button.rect.centerx = SCREEN_WIDTH//2
-            if button.draw(canvas):
+            if button.draw(canvas, TILE_SIZE):
                 if clickable:
                     if button.button_id == 0:
-                        resolutions()
+                        audio()
                     elif button.button_id == 1:
+                       resolutions()
+                    elif button.button_id == 2:
                         controls()
         clickable = True
         draw_text('Settings', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, True)
+                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
@@ -2890,7 +2997,72 @@ def controls():
                 if event.key == K_ESCAPE:
                     running = False
         draw_text('Controls', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, True)
+                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
+
+#show controls
+def audio():
+    number_of_buttons = 3
+    buttons = []
+    texts = ['Master volume', 'Music volume', 'Sound effects']
+    types = ['line', 'toggle', 'toggle']
+    images = [slider_line, toggle_on, toggle_on]
+    for x, button in enumerate(range(number_of_buttons)):
+        if types[x] == 'toggle':
+            button = Button(SCREEN_WIDTH*0.75 + images[x].get_width(), SCREEN_HEIGHT*0.1 + \
+                     x*images[x].get_height()*2, types[x], '', images[x], x)
+        else:
+            button = Button(SCREEN_WIDTH*0.85, SCREEN_HEIGHT*0.1 + x*images[x].get_height()*2, types[x], '', images[x], x)
+        buttons.append(button)
+    clickable = False
+    running = True
+    slider = green_slider_down.get_rect()
+    slider_float_value = 0
+    slider_line_rect = buttons[0].rect
+    while running:
+        canvas.fill(BLACK)
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    running = False
+        mouse_pos = pygame.mouse.get_pos()
+        if slider.collidepoint(mouse_pos):
+            if pygame.mouse.get_pressed()[0]:
+                slider_float_value = (slider_line_rect.width/(slider_line_rect.width/(mouse_pos[0] - SCREEN_WIDTH*0.75))) / 100
+                music_handler.set_master_volume(sfx_dic,slider_float_value)
+                slider.centerx = button.rect.x + button.rect.width * music_handler.master_volume
+                print(mouse_pos)
+        for button in buttons:
+            if button.type == 'line':
+                # print(slider, music_handler.master_volume)
+                slider.bottom = button.rect.top
+            draw_text(texts[button.button_id], 36, RED,
+                                      canvas, SCREEN_WIDTH*0.5, button.rect.centery, 'left',  TILE_SIZE)
+            if button.draw(canvas, TILE_SIZE):
+                if clickable:
+                    if button.button_id == 0:
+                        pass
+                    elif button.button_id == 1:
+                        music_handler.toggle_music()
+                        if music_handler.paused:
+                            button.image = toggle_off
+                        else:
+                            button.image = toggle_on
+                    elif button.button_id == 2:
+                        music_handler.toggle_sounds(sfx_dic)
+                        if music_handler.sounds_off:
+                            button.image = toggle_off
+                        else:
+                            button.image = toggle_on
+        clickable = True
+
+        canvas.blit(green_slider_down, (slider.x, slider.y))
+        draw_text('Audio', 72, WHITE,
+                                      canvas, SCREEN_WIDTH/10, SCREEN_HEIGHT*0.8, 'topleft', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
@@ -2910,7 +3082,7 @@ def resolutions():
     texts = ['800x640','1024x768','Fullscreen']
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, 'menu', button_clicked, x)
+                        x*button_clicked.get_height()*2, 'menu', texts[x], button_clicked, x)
         buttons.append(button)
     clickable = False
     while running:
@@ -2925,7 +3097,7 @@ def resolutions():
         
         for x,button in enumerate(buttons):
             button.rect.centerx = SCREEN_WIDTH//2
-            if button.draw(canvas):
+            if button.draw(canvas, TILE_SIZE):
                 if clickable:
                     if button.button_id == 0:
                         SCREEN_WIDTH, SCREEN_HEIGHT = 800, 640
@@ -2943,11 +3115,10 @@ def resolutions():
                     GRAVITY = round(SCREEN_HEIGHT / 12)
                     GRAVITY_FORCE_LIMIT = round(SCREEN_HEIGHT / 40)
                     animations_list = load_entity_animations()
-            draw_text(texts[x], 22, BLACK, canvas, button.rect.centerx, button.rect.y, True)
                 
         clickable = True
         draw_text('Resolution', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, True)
+                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 

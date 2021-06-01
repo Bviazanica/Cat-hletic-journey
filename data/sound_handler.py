@@ -1,4 +1,5 @@
 import pygame
+import random
 
 # music, sounds and volume handling
 class SoundHandler(object):
@@ -39,3 +40,16 @@ class SoundHandler(object):
             pygame.mixer.music.set_volume(self.master_volume)
         if not self.sounds_off:
             self.set_all_sounds_volume(sfx,self.master_volume)
+
+    def music_que(self, music_que, music_list):
+        if len(music_que) == 0:
+            music_que = music_list[2:-1]
+            random_music = random.choice(music_que)
+        else:
+            random_music = random.choice(music_que)
+
+        music_que.remove(random_music)
+        pygame.mixer.music.load(f'platformer/data/sounds/music/{random_music}')
+        pygame.mixer.music.play(0, 0.0, 2500)
+
+        return music_que

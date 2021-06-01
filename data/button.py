@@ -35,6 +35,6 @@ class Button():
         # draw button
         canvas.blit(self.image, self.rect)
         draw_text(self.text, 30, (255,0,0), canvas, self.rect.centerx, self.rect.centery, 'center', TILE_SIZE)
-        pygame.draw.rect(canvas, (122,22,100),
-                         (round(self.rect.x), round(self.rect.y ), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, (122,22,100),
+        #                  (round(self.rect.x), round(self.rect.y ), self.rect.width, self.rect.height), 2)
         return action

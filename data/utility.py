@@ -59,11 +59,13 @@ def load_sounds():
         sliced_name = name[:string_size - 4]
         dict[sliced_name] = new_file
     return dict
+
 def load_music_names():
     music_names = []
     for name in os.listdir(f'platformer/data/sounds/music'):
         music_names.append(name)
     return music_names
+
 #scaling images to certain size
 def transform_images(images, width, height, smooth):
     images_list = []

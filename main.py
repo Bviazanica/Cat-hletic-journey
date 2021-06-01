@@ -37,6 +37,10 @@ TILE_TYPES = 264
 
 BORDER_LEFT, BORDER_RIGHT = 0,0
 
+#music end event
+MUSIC_END = pygame.USEREVENT+1
+pygame.mixer.music.set_endevent(MUSIC_END)
+
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (240, 0, 0)
@@ -71,7 +75,8 @@ music_list = load_music_names()
 json_data = get_json_data()
 level_cols = json_data['level_1']['COLS']
 intro_scene = True
-tutorial = True
+tutorial = False
+music_que = music_list[2:-1]
 
 blue_fish_image = pygame.image.load(
     f'platformer/data/images/entities/Fish/Idle/0.png').convert_alpha()
@@ -83,10 +88,6 @@ cloud_image = pygame.image.load(
 
 button_clicked = pygame.image.load(
     f'platformer/data/images/interface/button_1.png').convert_alpha()
-slider_line = pygame.image.load(
-    f'platformer/data/images/interface/slider_line.png').convert_alpha()
-green_slider_down = pygame.image.load(
-    f'platformer/data/images/interface/green_slider_down.png').convert_alpha()
 sound_on = pygame.image.load(
     f'platformer/data/images/interface/sound_on.png').convert_alpha()
 sound_off = pygame.image.load(
@@ -713,6 +714,9 @@ class FinalCutScene:
                 self.new_step = False
                 self.opacity = 0
                 self.start_to_dim = False
+                if not music_handler.paused:
+                    #fade out outro
+                    pygame.mixer.music.fadeout(2500)
 
             if int(self.text_counter) < len(self.text['six']):
                     self.text_counter += 0.15
@@ -727,6 +731,9 @@ class FinalCutScene:
                     self.start_to_dim = False
                     self.cut_scene_running = False
                     self.player.alive = False
+                    if not music_handler.paused:
+                        pygame.mixer.music.load(f'platformer/data/sounds/music/main_menu_music.mp3')
+                        pygame.mixer.music.play(-1, 0.0, 2500)
                 self.dim_screen.fill((0, 0, 0, self.opacity))
                 
         return self.cut_scene_running
@@ -990,6 +997,7 @@ def load_level(level, img_list):
     world = World()
     player, camera, all_platforms, invisible_blocks = world.process_data(
         world_data, img_list, level)
+    print(fake_platforms_group)
     BORDER_LEFT = 0
     BORDER_RIGHT = world.level_length * TILE_SIZE
 
@@ -1020,7 +1028,7 @@ class World():
                     tile_data = (img, img_rect)
 
                     #set objects to array based on id of tile
-                    if tile in (66, 67, 68, 69, 70, 89, 90, 92, 94, 95, 96, 111, 112, 115):
+                    if tile in (66, 67, 68, 69, 70, 89, 90, 92, 93, 94, 95, 96, 111, 112, 115, 116):
                         self.obstacles_list.append(tile_data)
                     elif tile == 56:  # create invis tile
                         self.bounds_tiles_list.append(tile_data)
@@ -1034,7 +1042,10 @@ class World():
                         new_item = Item(boost_item_image,'Boost', x*TILE_SIZE, y*TILE_SIZE)
                         items_group.add(new_item)
                     elif tile == 12:
-                        new_decoration = Decoration(random.choice(dead_fish), x * TILE_SIZE, y*TILE_SIZE)
+                        new_decoration = Decoration(random.choice(dead_fish), x * TILE_SIZE, y*TILE_SIZE, 'dead_fish')
+                        decoration_group.add(new_decoration)
+                    elif tile in (185,186,187,207,208,209):
+                        new_decoration = Decoration(img, x * TILE_SIZE, y*TILE_SIZE, 'fence')
                         decoration_group.add(new_decoration)
                     elif tile == 20:
                         new_cage = Cage(x*TILE_SIZE, y*TILE_SIZE, cage_id)
@@ -1058,17 +1069,30 @@ class World():
                             platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id, 3*TILE_SIZE, level))
                         platform_id += 1
                         platform = []
+                        print(f'platform_id PLOSINA: {platform_id}')
                     elif tile == 74:
                         self.platforms.append(Platform(
                             x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id,3*TILE_SIZE, level))
                         platform_id += 1
+                        print(f'platform_id SINGLE: {platform_id}')
+                    elif tile in (41,61,63,64,86,87,75,76,77):
+                        new_decoration = Decoration(img, x * TILE_SIZE, y*TILE_SIZE, 'flower')
+                        decoration_group.add(new_decoration)
                     elif tile == 110:
-                        if x == 7:
+                        new_fake_platform = None
+                        if x == 17 and level == 2:
+                            new_fake_platform = FakePlatform(
+                                x * TILE_SIZE, y*TILE_SIZE, 2, 2, 'fall', fake_platform_id, 4*TILE_SIZE)
+                        elif x == 76 and level == 2:
                             new_fake_platform = FakePlatform(
                                 x * TILE_SIZE, y*TILE_SIZE, 3, 3, 'fall', fake_platform_id, 4*TILE_SIZE)
-                            fake_platform_id += 1
-                            fake_platforms_group.add(new_fake_platform)
-                            self.platforms.append(new_fake_platform)
+                        elif x == 62 and level == 3:
+                            print('adding')
+                            new_fake_platform = FakePlatform(
+                                x * TILE_SIZE, y*TILE_SIZE, 2, 2, 'fall', fake_platform_id, 8*TILE_SIZE)
+                        fake_platform_id += 1
+                        fake_platforms_group.add(new_fake_platform)
+                        self.platforms.append(new_fake_platform)
                     elif tile == 101:
                         img = random.choice(animations_list[5][2])
                         new_fish = Collectible(
@@ -1192,7 +1216,7 @@ class Entity(pygame.sprite.Sprite):
         self.local_time = 0
         self.air_timer = 0
 
-        self.fish = 0
+        self.fish = 40
         self.checkpoint_position = vec(0, 0)
 
         self.invulnerability = False
@@ -1210,9 +1234,9 @@ class Entity(pygame.sprite.Sprite):
         self.collision_treshold = 25
 
         if self.entity_id == 0:
-            self.health_points = 5
+            self.health_points = 10
         elif self.entity_id == 3:
-            self.health_points = 6
+            self.health_points = 2
             self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
         elif self.entity_id != 0:
             self.health_points = 1
@@ -1263,14 +1287,14 @@ class Entity(pygame.sprite.Sprite):
                 self.determine_movement()
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick, level)
             elif self.entity_id == 3:
-                if level == 4:
+                if level == 9:
                     if self.rect.y + self.rect.height + 2*TILE_SIZE > SCREEN_HEIGHT:
                         self.rect.y = SCREEN_HEIGHT - self.rect.height - 2*TILE_SIZE
                         self.direction *= -1
                     elif self.rect.y < 0:
                         self.rect.y = 0
                         self.direction *= -1
-                elif level == 5:
+                elif level == 10:
                     if not self.diving:
                         self.rect.x += self.speed * self.direction * tick # wingman
                         if self.rect.x < BORDER_LEFT:
@@ -1330,20 +1354,21 @@ class Entity(pygame.sprite.Sprite):
                     dx = 0
                     
         #player damaging the boss
-        if self.entity_id == 0 and level == 5:
-            for wingman in wingmans_group:
-                if wingman.alive:
-                    if abs((self.rect.bottom) - wingman.hitbox.top) <= self.collision_treshold and (self.rect.x + self.rect.width >= wingman.hitbox.x) and (self.rect.x <= wingman.hitbox.x + wingman.hitbox.width):
-                        if wingman.stunned == True and self.vel_y > 0 and not self.reset_invulnerability:
-                            wingman.hurt(False, 'player')
-                            sfx_dic['bounce'].play()
-                            jump_vel = tick * -self.jump_vel
-                            if jump_vel < -self.jump_force:
-                                jump_vel = -self.jump_force
-                            self.vel_y = jump_vel
-                            self.jump = True
-                            self.on_platform = False
-                            wingman.stunned = False
+        if self.entity_id == 0:
+            if level == 10:
+                for wingman in wingmans_group:
+                    if wingman.alive:
+                        if abs((self.rect.bottom) - wingman.hitbox.top) <= self.collision_treshold and (self.rect.x + self.rect.width >= wingman.hitbox.x) and (self.rect.x <= wingman.hitbox.x + wingman.hitbox.width):
+                            if wingman.stunned == True and self.vel_y > 0 and not self.reset_invulnerability:
+                                wingman.hurt(False, 'player')
+                                sfx_dic['bounce'].play()
+                                jump_vel = tick * -self.jump_vel
+                                if jump_vel < -self.jump_force:
+                                    jump_vel = -self.jump_force
+                                self.vel_y = jump_vel
+                                self.jump = True
+                                self.on_platform = False
+                                wingman.stunned = False
 
             # when near the fake platform, activate it
             for fake_platform in fake_platforms_group:
@@ -1355,7 +1380,6 @@ class Entity(pygame.sprite.Sprite):
                 if spike.rect.colliderect(self.rect.x + dx, self.rect.y + dy, self.rect.width, self.rect.height) \
                      and not self.invulnerability and not self.reset_invulnerability:
                     self.hurt(False, 'spike')
-            
             #cloud collision
             for cloud in clouds_group:
                 if cloud.rect.colliderect(self.rect.x + dx, self.rect.y + dy, self.rect.width, self.rect.height) \
@@ -1371,12 +1395,12 @@ class Entity(pygame.sprite.Sprite):
         for platform in all_platforms:
             if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.rect.width, self.rect.height):
                 if platform.move_x != 0:
-                    if dx == 0:
-                        dx += platform.direction * platform.speed * tick
-                    elif dx < 0 and platform.direction == 1:
-                        dx += -(platform.direction * platform.speed * tick)
-                    elif dx > 0 and platform.direction == -1:
-                        dx += -(platform.direction * platform.speed * tick)
+                    # if dx == 0:
+                    dx += platform.direction * platform.speed * tick
+                    # elif dx < 0 and platform.direction == 1:
+                    #     dx += -(platform.direction * platform.speed * tick)
+                    # elif dx > 0 and platform.direction == -1:
+                    #     dx += -(platform.direction * platform.speed * tick)
                     
                     
         dx = round(dx)
@@ -1542,7 +1566,8 @@ class Entity(pygame.sprite.Sprite):
                     else:
                         self.in_death_animation = True
                         if self.entity_id == 0:
-                            sfx_dic['death'].play()
+                            # sfx_dic['death'].play()
+                            pygame.mixer.music.fadeout(1000)
                         else:
                             sfx_dic['hit'].play()
                 else:
@@ -1681,13 +1706,11 @@ class Platform(pygame.sprite.Sprite):
         self.image.set_colorkey(BLACK)
         self.rect = self.image.get_rect()
 
-        self.speed = speed
-
         self.rect.x = x
         self.rect.y = y
 
-        self.move_x, self.move_y, self.direction = self.determine_movement_by_id(id, level)
-
+        self.move_x, self.move_y, self.direction, self.speed = self.determine_movement_by_id(id, level)
+    
     def update(self, world, tick):
         dx = 0
         dy = 0
@@ -1736,7 +1759,7 @@ class Platform(pygame.sprite.Sprite):
     #from loaded json data, determine behavior
     def determine_movement_by_id(self,id, level):
         data = json_data[f'level_{level}']['platforms'][id]
-        return data['move_x'],data['move_y'],data['direction']
+        return data['move_x'],data['move_y'],data['direction'],data['speed']*TILE_SIZE
 
 #Items
 class Item(pygame.sprite.Sprite):
@@ -1780,9 +1803,10 @@ class Item(pygame.sprite.Sprite):
         
 #decorations for map
 class Decoration(pygame.sprite.Sprite):
-    def __init__(self, img, x, y):
+    def __init__(self, img, x, y, type):
         pygame.sprite.Sprite.__init__(self)
         self.image = img
+        self.type = type
         self.rect = self.image.get_rect()
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
@@ -1807,7 +1831,7 @@ class Water(pygame.sprite.Sprite):
     def collide_water(self, target, level):
         if pygame.sprite.collide_rect(self, target):
             target.hurt(False, 'water')
-            if level == 4 and target.entity_id == 0:
+            if level == 9 and target.entity_id == 0:
                 return True
               
 #Mystery box   
@@ -2171,12 +2195,12 @@ class Checkpoint(pygame.sprite.Sprite):
                 is_lowest_id = False
         
         if is_lowest_id:
-            if level != 5 and level != 4:
+            if level != 10 and level != 9:
                 draw_text('start', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-            elif level == 4:
+            elif level == 9:
                 draw_text('Run!', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-            elif level == 5:
-                draw_text('careful', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
+            elif level == 10:
+                draw_text('good luck', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
         else:
             draw_text('checkpoint', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
         pygame.draw.rect(canvas, RED,
@@ -2220,6 +2244,9 @@ class Lever(pygame.sprite.Sprite):
     def __init__(self, x, y,lever_color):
         pygame.sprite.Sprite.__init__(self)
 
+        self.x = x
+        self.y = y
+
         self.lever_type = lever_color
         self.images_list = []
         for i in range(3):
@@ -2259,12 +2286,13 @@ class Lever(pygame.sprite.Sprite):
                 self.rect = self.image.get_rect()
                 self.rect.bottomright = location
             
-    def draw(self, canvas, offset_x, offset_y):
+    def draw(self, canvas, offset_x, offset_y, level):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))                                                                            
         pygame.draw.rect(canvas, RED,
                          (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
-
+        if level == 3 and self.activation_time == 0:
+            draw_text('Press "E"', 30, WHITE, canvas, self.rect.centerx - offset_x, self.rect.top - TILE_SIZE/2 - offset_y, 'midtop', TILE_SIZE)
     #resets lever effect
     def reset_to_default(self):
         self.image = self.images_list[1]
@@ -2286,7 +2314,6 @@ class Lever(pygame.sprite.Sprite):
                 member.is_open = state
                 member.new_state = True
 
-
 #main game function                      
 def game():
     # needed variables
@@ -2307,7 +2334,13 @@ def game():
     global tutorial
     global BORDER_LEFT
     global BORDER_RIGHT
+    global music_que
     level_complete = False
+    
+    if not music_handler.paused:
+        music_que = music_list[2:-1]
+        music_que = music_handler.music_que(music_que, music_list)
+    
     
     # level
     if intro_scene:
@@ -2324,6 +2357,11 @@ def game():
         elif x == 263:
             img = pygame.transform.scale(img, (TILE_SIZE*2, 
                 TILE_SIZE))
+        elif x in (75,76,77):
+            img = pygame.transform.smoothscale(img, (round(TILE_SIZE/1.5), 
+                round(TILE_SIZE/1.5)))
+        elif x in (95,96):
+            img = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
         else:
             img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
         img_list.append(img)
@@ -2404,6 +2442,11 @@ def game():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+            if event.type == MUSIC_END:
+                if not music_handler.paused:
+                    if boss_fight == False and not stage == 4:
+                        music_que = music_handler.music_que(music_que, music_list)
+                        
             if not player.locked:
                 # keyboard presses
                 if event.type == pygame.KEYDOWN:
@@ -2413,7 +2456,7 @@ def game():
                     if event.key == pygame.K_d:
                         player.moving_right = True
                         player.direction = 1
-                    if event.key == pygame.K_w and player.alive and player.jump == False and not player.in_death_animation:
+                    if (event.key == pygame.K_w or event.key == pygame.K_SPACE) and player.alive and player.jump == False and not player.in_death_animation:
                         if player.air_timer < 10:
                             sfx_dic['jump_2'].play()
                             jump_vel = tick * -player.jump_vel
@@ -2448,31 +2491,38 @@ def game():
                 player.set_action(int(Animation_type.Idle))
 
         #camera update in levels
-        if level == 4 and new_stage:
+        if level == 9 and new_stage:
             new_stage = False
             camera_type = Auto(camera, player)
             camera.setmethod(camera_type)
             new_camera = True
         
-        elif level == 5:
+        elif level == 10:
             if stage == 0 and start_fight:
+                pygame.mixer.music.stop()
                 stage = 1
                 boss_fight = True
                 new_stage = True
                 BORDER_LEFT, BORDER_RIGHT = 0 + last_camera_coord[0], 0 + last_camera_coord[0] + SCREEN_WIDTH
+                pygame.mixer.music.load(f'platformer/data/sounds/music/boss_music.mp3')
+                if not music_handler.paused:
+                    pygame.mixer.music.play(-1, 0.0, 2500)
         
             if boss_fight and new_stage and stage == 1:
                 camera = None
-                print("camera non")
             
             elif not boss_fight and new_stage and stage == 4:
+                pygame.mixer.music.stop()
                 BORDER_LEFT, BORDER_RIGHT = 0, world.get_world_length()
                 camera = Camera(player,SCREEN_WIDTH, SCREEN_HEIGHT)
                 camera_type = Border(camera, player, world.get_world_length())
                 camera.setmethod(camera_type)
                 new_stage = False
                 new_camera = True
-                print('new cam')
+                if not music_handler.paused:
+                    #load outro music
+                    pygame.mixer.music.load(f'platformer/data/sounds/music/outro.mp3')
+                    pygame.mixer.music.play(-1, 0.0, 2500)
 
         #if player is alive update everything
         if player.alive:
@@ -2492,7 +2542,7 @@ def game():
 
             if wingman:
                 #wingman behavior in level
-                if level == 4:
+                if level == 9:
                     if player.rect.x + player.rect.width < camera.offset.x and not player.in_death_animation:
                         player.hurt(True, 'Border')
                         camera.offset.x = 0
@@ -2507,7 +2557,7 @@ def game():
                              wingman.shoot_timer > wingman.cooldowns['shoot']:
                             wingman.shoot('basic', 5*TILE_SIZE, Vector2(-1,0))
                 # wingman behavior in level
-                if level == 5:
+                if level == 10:
                     # boss fight stages
                     if stage == 0 and new_stage:
                         new_stage = False
@@ -2554,9 +2604,9 @@ def game():
                                 wingman.diving = False
                                 wingman.stun_timer = 0
                                 dy = 0
-                                if wingman.health_points <= 3:
-                                    new_stage = True
-                                    stage = 2
+                                # if wingman.health_points <= 3:
+                                new_stage = True
+                                stage = 2
                             wingman.rect.y += dy
                     elif stage == 2:
                         if new_stage:
@@ -2660,7 +2710,6 @@ def game():
                 box.update(img_list)
                 if box.destroy:
                     choice = random.random()
-                    print(choice)
                     #spawn item
                     if choice < 0.15:
                         new_item = Item(bubble_item_image, choice, box.rect.x, box.rect.y)
@@ -2687,12 +2736,12 @@ def game():
 
             for checkpoint in checkpoints_group:
                 checkpoint.update(player)
-                if stage == 0 and level == 5:
+                if stage == 0 and level == 10:
                     if checkpoint.active == False or checkpoint.rect.x < player.rect.x:
                         start_fight = True
                         player.checkpoint_position = checkpoint.rect.centerx, checkpoint.rect.y + TILE_SIZE - player.rect.height
                         
-                elif level == 4:
+                elif level == 9:
                     if not new_camera and checkpoint.active == False:
                         new_stage = True
 
@@ -2708,7 +2757,7 @@ def game():
             if friend:
                 in_cage = simple_collision_check(friend, cages_group)
                 friend.update(current_time, tick, world, all_platforms,level)
-                if level == 5 and friend.locked == True  and in_cage:
+                if level == 10 and friend.locked == True  and in_cage:
                     friend.rect.x = friend.x - friend.rect.width//2
                     friend.rect.bottom = friend.y - friend.rect.height*0.1
                     friend.flip = True
@@ -2731,7 +2780,7 @@ def game():
             
             # adjust camera to player
             if bool(camera):
-                if level == 4 and new_camera and not player.in_death_animation:
+                if level == 9 and new_camera and not player.in_death_animation:
                     camera.offset.x += 4*TILE_SIZE * tick 
                 else:
                     camera.scroll()
@@ -2746,7 +2795,8 @@ def game():
             world.draw(canvas, offset_x, offset_y)
 
             for decoration in decoration_group:
-                decoration.draw(canvas, offset_x, offset_y)
+                if decoration.type != 'fence':
+                    decoration.draw(canvas, offset_x, offset_y)
 
             for platform in all_platforms:
                 platform.draw(canvas, offset_x, offset_y)
@@ -2776,7 +2826,7 @@ def game():
                 projectile.draw(canvas, offset_x, offset_y)
 
             if friend:
-                if level == 5 and friend.locked:
+                if level == 10 and friend.locked:
                     for friend in friend_group:
                         friend.draw(canvas, offset_x, offset_y)
                     for cage in cages_group:
@@ -2787,6 +2837,9 @@ def game():
                         cage.draw(canvas, offset_x, offset_y)
                     for friend in friend_group:
                         friend.draw(canvas, offset_x, offset_y)
+            else:
+                for cage in cages_group:
+                        cage.draw(canvas, offset_x, offset_y)
 
             if wingman:
                 wingman.draw(canvas, offset_x, offset_y)
@@ -2806,7 +2859,7 @@ def game():
                 snake.draw(canvas,offset_x, offset_y)
 
             for lever in levers_group:
-                lever.draw(canvas,offset_x, offset_y)
+                lever.draw(canvas,offset_x, offset_y,level)
 
             for item in items_group:
                 item.draw(canvas, offset_x, offset_y)
@@ -2818,9 +2871,13 @@ def game():
                 guard.draw(canvas, offset_x, offset_y)
 
             player.draw(canvas, offset_x, offset_y)
-            if not level == 5:
+            if not level == 10:
                 player.draw_fish(canvas)
             player.draw_health(canvas)
+
+            for decoration in decoration_group:
+                if decoration.type == 'fence':
+                    decoration.draw(canvas, offset_x, offset_y)
         #cinematics
         if intro_scene:
             if level == 1:
@@ -2832,10 +2889,10 @@ def game():
                 cut_scene_manager.start_cut_scene(
                                 Tutorial(player, current_time))
                 tutorial = False
-        if level == 3 and pygame.sprite.collide_rect(player, guard):
+        if level == 8 and pygame.sprite.collide_rect(player, guard):
                 cut_scene_manager.start_cut_scene(
                                 CutSceneTwo(player, guard, current_time))
-        elif level == 5 and bool(wingmans_group) == False:
+        elif level == 10 and bool(wingmans_group) == False:
             for lever in levers_group:
                 if lever.activated:
                     cut_scene_manager.start_cut_scene(
@@ -2852,12 +2909,17 @@ def game():
 
 #game over screen
 def game_over_menu(player, level, img_list):
+    global music_que
     world = None
     camera = None
     all_platforms = None
     invisible_blocks = None
     level = None
     clickable = True
+
+    if not music_handler.paused:
+        pygame.mixer.music.stop()
+
     x = 0
     texts = ['Restart', 'Back to menu']
     number_of_buttons = 2
@@ -2871,10 +2933,11 @@ def game_over_menu(player, level, img_list):
         if button.draw(canvas, TILE_SIZE):
             if clickable:
                 if button.button_id == 0:
-                    world_data = reset_level()
                     world, player, camera, all_platforms, invisible_blocks, \
                     level, cut_scene_manager, BORDER_LEFT, BORDER_RIGHT = load_level(
                         1, img_list)
+                    if not music_handler.paused:
+                        music_que = music_handler.music_que([], music_list)
                 elif button.button_id == 1:
                     pygame.quit()
                     sys.exit()
@@ -2884,7 +2947,7 @@ def game_over_menu(player, level, img_list):
 
 #main menu
 def main_menu():
-    pygame.mixer.music.load(f'platformer/data/sounds/music/{music_list[0]}')
+    pygame.mixer.music.load(f'platformer/data/sounds/music/main_menu_music.mp3')
     pygame.mixer.music.play(-1, 0.0, 2500)
     texts = ['Start', 'Settings', 'Credits', 'Quit']
     x = 0
@@ -2917,7 +2980,6 @@ def main_menu():
                     elif button.button_id == 1:
                         clickable = False
                         settings()
-                        
                     elif button.button_id == 2:
                         clickable = False
                         show_credits()
@@ -3005,9 +3067,13 @@ def controls():
 def audio():
     number_of_buttons = 3
     buttons = []
+    grey_rect_surface = pygame.Surface((4*TILE_SIZE,TILE_SIZE))
+    grey_rect_surface.fill(DARKGRAY)
+    actual_volume_rect = grey_rect_surface.get_rect()
+    
     texts = ['Master volume', 'Music volume', 'Sound effects']
-    types = ['line', 'toggle', 'toggle']
-    images = [slider_line, toggle_on, toggle_on]
+    types = ['sound_bar', 'toggle', 'toggle']
+    images = [grey_rect_surface, toggle_on, toggle_on]
     for x, button in enumerate(range(number_of_buttons)):
         if types[x] == 'toggle':
             button = Button(SCREEN_WIDTH*0.75 + images[x].get_width(), SCREEN_HEIGHT*0.1 + \
@@ -3015,11 +3081,11 @@ def audio():
         else:
             button = Button(SCREEN_WIDTH*0.85, SCREEN_HEIGHT*0.1 + x*images[x].get_height()*2, types[x], '', images[x], x)
         buttons.append(button)
+
+    actual_volume_rect.center = buttons[0].rect.center
+    actual_volume_rect.width = music_handler.master_volume*actual_volume_rect.width
     clickable = False
     running = True
-    slider = green_slider_down.get_rect()
-    slider_float_value = 0
-    slider_line_rect = buttons[0].rect
     while running:
         canvas.fill(BLACK)
         for event in pygame.event.get():
@@ -3029,23 +3095,29 @@ def audio():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-        mouse_pos = pygame.mouse.get_pos()
-        if slider.collidepoint(mouse_pos):
-            if pygame.mouse.get_pressed()[0]:
-                slider_float_value = (slider_line_rect.width/(slider_line_rect.width/(mouse_pos[0] - SCREEN_WIDTH*0.75))) / 100
-                music_handler.set_master_volume(sfx_dic,slider_float_value)
-                slider.centerx = button.rect.x + button.rect.width * music_handler.master_volume
-                print(mouse_pos)
+
+        pos = pygame.mouse.get_pos()
+        if pygame.mouse.get_pressed()[0] == 1:
+            click_difference_master_volume_left = buttons[0].rect.x - pos[0]
+            click_difference_master_volume_right = pos[0] - buttons[0].rect.right 
+            if pos[1] >= buttons[0].rect.top and pos[1] <= buttons[0].rect.bottom:
+                if click_difference_master_volume_left < TILE_SIZE//5 and click_difference_master_volume_left > 0:
+                    music_handler.set_master_volume(sfx_dic, 0.0)
+                    actual_volume_rect.width = 0
+                elif click_difference_master_volume_right < TILE_SIZE//5 and click_difference_master_volume_right > 0:
+                    music_handler.set_master_volume(sfx_dic, 1.0)
+                    actual_volume_rect.width = buttons[0].rect.width
         for button in buttons:
-            if button.type == 'line':
-                # print(slider, music_handler.master_volume)
-                slider.bottom = button.rect.top
             draw_text(texts[button.button_id], 36, RED,
                                       canvas, SCREEN_WIDTH*0.5, button.rect.centery, 'left',  TILE_SIZE)
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
                     if button.button_id == 0:
-                        pass
+                        mouse_pos = pygame.mouse.get_pos()
+                        #urcitme kde je mouse_pox[x] vzhladom na rect buttonu
+                        calculate_click_pos = abs(mouse_pos[0] - button.rect.x)
+                        actual_volume_rect.width = calculate_click_pos
+                        music_handler.set_master_volume(sfx_dic,float(actual_volume_rect.width/button.rect.width))
                     elif button.button_id == 1:
                         music_handler.toggle_music()
                         if music_handler.paused:
@@ -3058,9 +3130,12 @@ def audio():
                             button.image = toggle_off
                         else:
                             button.image = toggle_on
+            
+            
+            pygame.draw.rect(canvas, GREEN,
+                        (buttons[0].rect.x, buttons[0].rect.y, actual_volume_rect.width, actual_volume_rect.height))
         clickable = True
 
-        canvas.blit(green_slider_down, (slider.x, slider.y))
         draw_text('Audio', 72, WHITE,
                                       canvas, SCREEN_WIDTH/10, SCREEN_HEIGHT*0.8, 'topleft', TILE_SIZE)
         screen.blit(canvas, (0, 0))

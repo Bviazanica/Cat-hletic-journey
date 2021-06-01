@@ -112,6 +112,8 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
             elif platform.move_y:
                 entity.rect.bottom = platform.rect.top - 1
             collision_types['bottom-platform'] = True
+            if platform.platform_id:
+                print(platform.platform_id)
         elif abs((entity.rect.top) - platform.rect.bottom) <= entity.collision_treshold:
             entity.rect.top = platform.rect.bottom  + 1
             collision_types['top'] = True

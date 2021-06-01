@@ -1,40 +1,84 @@
 {
     "level_1": {
-        "COLS": 50,
-        "platforms": [
-            {
-                "id": 0,
-                "move_x": 1,
-                "move_y": 0,
-                "direction": 1
-            }
-        ]
+        "COLS": 50
     },
     "level_2": {
-        "COLS": 50,
+        "COLS": 100,
         "platforms": [
             {
                 "id": 0,
                 "move_x": 1,
                 "move_y": 0,
-                "direction": 1
+                "direction": 1,
+                "speed": 3
             },
             {
                 "id": 1,
                 "move_x": 1,
                 "move_y": 0,
-                "direction": 1
+                "direction": 1,
+                "speed": 3
             }
         ]
     },
     "level_3": {
-        "COLS": 50,
+        "COLS": 150,
         "platforms": [
             {
                 "id": 0,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 3
+            },
+            {
+                "id": 1,
                 "move_x": 1,
                 "move_y": 0,
-                "direction": 1
+                "direction": -1,
+                "speed": 3
+            },
+            {
+                "id": 2,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": -1,
+                "speed": 3
+            },
+            {
+                "id": 3,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            
+            },
+            {
+                "id": 4,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 5,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 6,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            },{
+                "id": 7,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
             }
         ]
     },

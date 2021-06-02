@@ -73,7 +73,8 @@
                 "move_y": 0,
                 "direction": 1,
                 "speed": 2
-            },{
+            },
+            {
                 "id": 7,
                 "move_x": 1,
                 "move_y": 0,
@@ -83,18 +84,109 @@
         ]
     },
     "level_4": {
-        "COLS": 100,
+        "COLS": 150,
         "platforms": [
             {
                 "id": 0,
                 "move_x": 1,
                 "move_y": 0,
-                "direction": 1
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 1,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 2,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 3,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
             }
         ]
     },
     "level_5": {
+        "COLS": 150,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            }
+        ]
+    },
+    "level_6": {
+        "COLS": 200,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 1,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            }
+        ]
+    },
+    "level_7": {
         "COLS": 50,
         "platforms": []
+    },
+    "level_8": {
+        "COLS": 200,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 1,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            }
+        ]
+    },
+    "level_9": {
+        "COLS": 200,
+        "platforms": [
+            {
+                "id": 0,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },
+            {
+                "id": 1,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            }
+        ]
     }
 }

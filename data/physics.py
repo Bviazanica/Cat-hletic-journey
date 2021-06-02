@@ -62,6 +62,9 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
             if sprite.alive and not sprite.in_death_animation and not entity.invulnerability and not entity.reset_invulnerability:
                 if sprite.entity_id != 8:
                     entity.hurt(False, 'sprite')
+                elif sprite.entity_id == 8 and sprite.speed == 0:
+                    entity.hurt(False, 'flyingman')
+
 
     # checking collisions for Y axis
     entity.rect.y += movement[1]
@@ -79,7 +82,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
     # y collision with invisible blocks
     hit_list = collision_not_tile(entity.rect, invisible_blocks)
     for block in hit_list:
-        if movement[1] < 0:
+        if movement[1] < 0 and entity.vel_y < 0:
             entity.rect.top = block.rect.bottom
             block.visible = True
             collision_types['invisible-block-top'] = True
@@ -94,10 +97,8 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
                 box.new_state = True
                 if box.hits_to_break == 1:
                     sfx_dic['box_hit'].play()
-                    print('hit')
                 else:
                     sfx_dic['box_break'].play()
-                    print('break')
             collision_types['item-box-top'] = True
             
         elif movement[1] > 0:
@@ -112,8 +113,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
             elif platform.move_y:
                 entity.rect.bottom = platform.rect.top - 1
             collision_types['bottom-platform'] = True
-            if platform.platform_id:
-                print(platform.platform_id)
+            
         elif abs((entity.rect.top) - platform.rect.bottom) <= entity.collision_treshold:
             entity.rect.top = platform.rect.bottom  + 1
             collision_types['top'] = True

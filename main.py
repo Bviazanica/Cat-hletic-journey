@@ -75,7 +75,7 @@ music_list = load_music_names()
 json_data = get_json_data()
 level_cols = json_data['level_1']['COLS']
 intro_scene = True
-tutorial = False
+tutorial = True
 music_que = music_list[2:-1]
 
 blue_fish_image = pygame.image.load(
@@ -866,7 +866,10 @@ class CutSceneManager:
 
 
 def draw_background(canvas, offset_x, offset_y, background_images):
-    for x in range(3):
+    draw_range = 3
+    if level_cols > 150:
+        draw_range = 4
+    for x in range(draw_range):
         parallax_variable = 0.1
         for image in background_images:
             canvas.blit(image, ((x * SCREEN_WIDTH - round(offset_x * parallax_variable)), 0 - offset_y*parallax_variable))
@@ -997,7 +1000,7 @@ def load_level(level, img_list):
     world = World()
     player, camera, all_platforms, invisible_blocks = world.process_data(
         world_data, img_list, level)
-    print(fake_platforms_group)
+
     BORDER_LEFT = 0
     BORDER_RIGHT = world.level_length * TILE_SIZE
 
@@ -1028,7 +1031,7 @@ class World():
                     tile_data = (img, img_rect)
 
                     #set objects to array based on id of tile
-                    if tile in (66, 67, 68, 69, 70, 89, 90, 92, 93, 94, 95, 96, 111, 112, 115, 116):
+                    if tile in (66, 67, 68, 69, 70, 88, 89, 90, 92, 93, 94, 95, 96, 111, 112, 115, 116):
                         self.obstacles_list.append(tile_data)
                     elif tile == 56:  # create invis tile
                         self.bounds_tiles_list.append(tile_data)
@@ -1036,10 +1039,10 @@ class World():
                         new_item = Item(bubble_item_image,'Bubble', x*TILE_SIZE, y*TILE_SIZE)
                         items_group.add(new_item)
                     elif tile == 58:
-                        new_item = Item(health_item_image,'Health', x*TILE_SIZE, y*TILE_SIZE)
+                        new_item = Item(boost_item_image,'Boost', x*TILE_SIZE, y*TILE_SIZE)
                         items_group.add(new_item)
                     elif tile == 59:
-                        new_item = Item(boost_item_image,'Boost', x*TILE_SIZE, y*TILE_SIZE)
+                        new_item = Item(health_item_image,'Health', x*TILE_SIZE, y*TILE_SIZE)
                         items_group.add(new_item)
                     elif tile == 12:
                         new_decoration = Decoration(random.choice(dead_fish), x * TILE_SIZE, y*TILE_SIZE, 'dead_fish')
@@ -1075,19 +1078,30 @@ class World():
                             x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id,3*TILE_SIZE, level))
                         platform_id += 1
                         print(f'platform_id SINGLE: {platform_id}')
-                    elif tile in (41,61,63,64,86,87,75,76,77):
+                    elif tile in (41,61,63,64,86,87,75,76,77,120,165):
                         new_decoration = Decoration(img, x * TILE_SIZE, y*TILE_SIZE, 'flower')
                         decoration_group.add(new_decoration)
                     elif tile == 110:
                         new_fake_platform = None
-                        if x == 17 and level == 2:
+                        if level == 2 and x == 17:
                             new_fake_platform = FakePlatform(
                                 x * TILE_SIZE, y*TILE_SIZE, 2, 2, 'fall', fake_platform_id, 4*TILE_SIZE)
-                        elif x == 76 and level == 2:
+                        elif level == 2 and x == 76:
                             new_fake_platform = FakePlatform(
                                 x * TILE_SIZE, y*TILE_SIZE, 3, 3, 'fall', fake_platform_id, 4*TILE_SIZE)
-                        elif x == 62 and level == 3:
-                            print('adding')
+                        elif level == 3 and x == 62:
+                            new_fake_platform = FakePlatform(
+                                x * TILE_SIZE, y*TILE_SIZE, 2, 2, 'fall', fake_platform_id, 8*TILE_SIZE)
+                        elif level == 4 and x == 126:
+                            new_fake_platform = FakePlatform(
+                                x * TILE_SIZE, y*TILE_SIZE, 1, 1, 'fall', fake_platform_id, 15*TILE_SIZE)
+                        elif level == 5 and x == 104:
+                            new_fake_platform = FakePlatform(
+                                x * TILE_SIZE, y*TILE_SIZE, 2, 2, 'fall', fake_platform_id, 8*TILE_SIZE)
+                        elif level == 6 and x == 98 or x == 127:
+                            new_fake_platform = FakePlatform(
+                                x * TILE_SIZE, y*TILE_SIZE, 3, 3, 'fall', fake_platform_id, 8*TILE_SIZE)
+                        elif level == 6 and x == 154:
                             new_fake_platform = FakePlatform(
                                 x * TILE_SIZE, y*TILE_SIZE, 2, 2, 'fall', fake_platform_id, 8*TILE_SIZE)
                         fake_platform_id += 1
@@ -1130,7 +1144,10 @@ class World():
                             'Fish', blue_fish_image, x * TILE_SIZE, y * TILE_SIZE )
                             fish_group.add(new_fish)
                     elif tile == 237:
-                        new_flyingman = Entity(8, x*TILE_SIZE, y*TILE_SIZE, 3*TILE_SIZE)
+                        if level == 4:
+                            new_flyingman = Entity(8, x*TILE_SIZE, y*TILE_SIZE, 0)
+                        else:
+                            new_flyingman = Entity(8, x*TILE_SIZE, y*TILE_SIZE, 3*TILE_SIZE)
                         enemies_group.add(new_flyingman)
                     elif tile == 238:  # create player
                         player = Entity(0, x * TILE_SIZE,
@@ -1216,7 +1233,7 @@ class Entity(pygame.sprite.Sprite):
         self.local_time = 0
         self.air_timer = 0
 
-        self.fish = 40
+        self.fish = 0
         self.checkpoint_position = vec(0, 0)
 
         self.invulnerability = False
@@ -1234,7 +1251,7 @@ class Entity(pygame.sprite.Sprite):
         self.collision_treshold = 25
 
         if self.entity_id == 0:
-            self.health_points = 10
+            self.health_points = 3
         elif self.entity_id == 3:
             self.health_points = 2
             self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
@@ -1257,7 +1274,7 @@ class Entity(pygame.sprite.Sprite):
 
     def update(self, current_time, tick, world, all_platforms, level):
         self.local_time = current_time
-
+        
         #control the effects of items
         if self.entity_id == 0:
             if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
@@ -1287,14 +1304,14 @@ class Entity(pygame.sprite.Sprite):
                 self.determine_movement()
                 self.move(self.moving_left, self.moving_right, world, all_platforms,tick, level)
             elif self.entity_id == 3:
-                if level == 9:
+                if level == 8:
                     if self.rect.y + self.rect.height + 2*TILE_SIZE > SCREEN_HEIGHT:
                         self.rect.y = SCREEN_HEIGHT - self.rect.height - 2*TILE_SIZE
                         self.direction *= -1
                     elif self.rect.y < 0:
                         self.rect.y = 0
                         self.direction *= -1
-                elif level == 10:
+                elif level == 9:
                     if not self.diving:
                         self.rect.x += self.speed * self.direction * tick # wingman
                         if self.rect.x < BORDER_LEFT:
@@ -1355,7 +1372,7 @@ class Entity(pygame.sprite.Sprite):
                     
         #player damaging the boss
         if self.entity_id == 0:
-            if level == 10:
+            if level == 9:
                 for wingman in wingmans_group:
                     if wingman.alive:
                         if abs((self.rect.bottom) - wingman.hitbox.top) <= self.collision_treshold and (self.rect.x + self.rect.width >= wingman.hitbox.x) and (self.rect.x <= wingman.hitbox.x + wingman.hitbox.width):
@@ -1641,7 +1658,8 @@ class Entity(pygame.sprite.Sprite):
                 canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
 
     #draw amount of fish player collected
-    def draw_fish(self, canvas):    
+    def draw_fish(self, canvas):
+        draw_text(f'x {self.fish}', 30, WHITE, canvas, round(TILE_SIZE*1.5), TILE_SIZE//2, 'topleft', TILE_SIZE)
         canvas.blit(blue_fish_image, (TILE_SIZE//4, TILE_SIZE//4))
 
     #draw health of player
@@ -1831,7 +1849,7 @@ class Water(pygame.sprite.Sprite):
     def collide_water(self, target, level):
         if pygame.sprite.collide_rect(self, target):
             target.hurt(False, 'water')
-            if level == 9 and target.entity_id == 0:
+            if level == 8 and target.entity_id == 0:
                 return True
               
 #Mystery box   
@@ -2195,11 +2213,11 @@ class Checkpoint(pygame.sprite.Sprite):
                 is_lowest_id = False
         
         if is_lowest_id:
-            if level != 10 and level != 9:
+            if level != 9 and level != 8:
                 draw_text('start', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-            elif level == 9:
+            elif level == 8:
                 draw_text('Run!', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-            elif level == 10:
+            elif level == 9:
                 draw_text('good luck', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
         else:
             draw_text('checkpoint', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
@@ -2341,7 +2359,6 @@ def game():
         music_que = music_list[2:-1]
         music_que = music_handler.music_que(music_que, music_list)
     
-    
     # level
     if intro_scene:
         level = 0
@@ -2352,7 +2369,7 @@ def game():
     for x in range(TILE_TYPES):
         img = pygame.image.load(f'platformer/data/images/tiles/{x}.png').convert_alpha()
         if x == 210 or x == 211:
-            img = pygame.transform.smoothscale(img, (TILE_SIZE, round(
+            img = pygame.transform.smoothscale(img, (TILE_SIZE - TILE_SIZE//5, round(
                 TILE_SIZE/(img.get_width()/img.get_height()))))
         elif x == 263:
             img = pygame.transform.scale(img, (TILE_SIZE*2, 
@@ -2377,6 +2394,8 @@ def game():
     timer = 0
     counter = 0
     new_camera = False
+    fishes = 0
+    player_health = 3   
 
     last_camera_coord = 0.0,0.0
 
@@ -2401,7 +2420,7 @@ def game():
     fake_platform_green, fake_ground_green = return_images_from_list(random_images)
     world, player, camera, all_platforms, invisible_blocks, \
     level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
-        2, img_list)
+        0, img_list)
 
     # Main game loop.
     while running:
@@ -2417,6 +2436,8 @@ def game():
             level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
                 level, img_list)
             level_complete = False
+            player.health_points = player_health
+            player.fish = fishes
         if tick > 0.3:
             tick = 0.2
 
@@ -2435,7 +2456,7 @@ def game():
             guard = random.choice(guardian_group.sprites())
         if bool(wingmans_group):
             wingman = random.choice(wingmans_group.sprites())
-        
+            
         # User input
         for event in pygame.event.get():
             # quit game
@@ -2491,13 +2512,13 @@ def game():
                 player.set_action(int(Animation_type.Idle))
 
         #camera update in levels
-        if level == 9 and new_stage:
+        if level == 8 and new_stage:
             new_stage = False
             camera_type = Auto(camera, player)
             camera.setmethod(camera_type)
             new_camera = True
         
-        elif level == 10:
+        elif level == 9:
             if stage == 0 and start_fight:
                 pygame.mixer.music.stop()
                 stage = 1
@@ -2542,7 +2563,7 @@ def game():
 
             if wingman:
                 #wingman behavior in level
-                if level == 9:
+                if level == 8:
                     if player.rect.x + player.rect.width < camera.offset.x and not player.in_death_animation:
                         player.hurt(True, 'Border')
                         camera.offset.x = 0
@@ -2557,7 +2578,7 @@ def game():
                              wingman.shoot_timer > wingman.cooldowns['shoot']:
                             wingman.shoot('basic', 5*TILE_SIZE, Vector2(-1,0))
                 # wingman behavior in level
-                if level == 10:
+                if level == 9:
                     # boss fight stages
                     if stage == 0 and new_stage:
                         new_stage = False
@@ -2712,21 +2733,21 @@ def game():
                     choice = random.random()
                     #spawn item
                     if choice < 0.15:
-                        new_item = Item(bubble_item_image, choice, box.rect.x, box.rect.y)
+                        new_item = Item(bubble_item_image, 'Bubble', box.rect.x, box.rect.y)
                         items_group.add(new_item)
                     elif choice < 0.30:
-                        new_item = Item(health_item_image, choice, box.rect.x, box.rect.y)
+                        new_item = Item(health_item_image, 'Health', box.rect.x, box.rect.y)
                         items_group.add(new_item)
                     elif choice  < 0.45:
-                        new_item = Item(boost_item_image,  choice, box.rect.x, box.rect.y)
+                        new_item = Item(boost_item_image,  'Boost', box.rect.x, box.rect.y)
                         items_group.add(new_item)
-                    elif choice  < 0.55:
+                    elif choice  < 0.53:
                         new_spikeman = Entity(2,  box.rect.x, box.rect.top, 3*TILE_SIZE)
                         enemies_group.add(new_spikeman)
-                    elif choice  < 0.65:
+                    elif choice  < 0.60:
                         new_snake = Snake(4, box.rect.x, box.rect.top)
                         snakes_group.add(new_snake)
-                    elif choice  < 0.75:
+                    elif choice  < 0.67:
                         new_enemy = Entity(1, box.rect.x, box.rect.top, 3*TILE_SIZE)
                         enemies_group.add(new_enemy)  
                     box.kill()
@@ -2736,12 +2757,12 @@ def game():
 
             for checkpoint in checkpoints_group:
                 checkpoint.update(player)
-                if stage == 0 and level == 10:
+                if stage == 0 and level == 9:
                     if checkpoint.active == False or checkpoint.rect.x < player.rect.x:
                         start_fight = True
                         player.checkpoint_position = checkpoint.rect.centerx, checkpoint.rect.y + TILE_SIZE - player.rect.height
                         
-                elif level == 9:
+                elif level == 8:
                     if not new_camera and checkpoint.active == False:
                         new_stage = True
 
@@ -2757,13 +2778,14 @@ def game():
             if friend:
                 in_cage = simple_collision_check(friend, cages_group)
                 friend.update(current_time, tick, world, all_platforms,level)
-                if level == 10 and friend.locked == True  and in_cage:
+                if level == 9 and friend.locked == True  and in_cage:
                     friend.rect.x = friend.x - friend.rect.width//2
                     friend.rect.bottom = friend.y - friend.rect.height*0.1
                     friend.flip = True
 
             for exit in exit_group:
                 exit.update(player)
+
             for block in invisible_blocks.copy():
                 if block.visible:
                     world.obstacles_list.append([block.image, block.rect])
@@ -2777,10 +2799,12 @@ def game():
             if pygame.sprite.spritecollide(player, exit_group, False):
                 sfx_dic['level_complete'].play()
                 level_complete = True
+                fishes = player.fish
+                player_health = player.health_points
             
             # adjust camera to player
             if bool(camera):
-                if level == 9 and new_camera and not player.in_death_animation:
+                if level == 8 and new_camera and not player.in_death_animation:
                     camera.offset.x += 4*TILE_SIZE * tick 
                 else:
                     camera.scroll()
@@ -2826,7 +2850,7 @@ def game():
                 projectile.draw(canvas, offset_x, offset_y)
 
             if friend:
-                if level == 10 and friend.locked:
+                if level == 9 and friend.locked:
                     for friend in friend_group:
                         friend.draw(canvas, offset_x, offset_y)
                     for cage in cages_group:
@@ -2871,7 +2895,7 @@ def game():
                 guard.draw(canvas, offset_x, offset_y)
 
             player.draw(canvas, offset_x, offset_y)
-            if not level == 10:
+            if not level == 9:
                 player.draw_fish(canvas)
             player.draw_health(canvas)
 
@@ -2889,10 +2913,10 @@ def game():
                 cut_scene_manager.start_cut_scene(
                                 Tutorial(player, current_time))
                 tutorial = False
-        if level == 8 and pygame.sprite.collide_rect(player, guard):
+        if level == 7 and pygame.sprite.collide_rect(player, guard):
                 cut_scene_manager.start_cut_scene(
                                 CutSceneTwo(player, guard, current_time))
-        elif level == 10 and bool(wingmans_group) == False:
+        elif level == 9 and bool(wingmans_group) == False:
             for lever in levers_group:
                 if lever.activated:
                     cut_scene_manager.start_cut_scene(

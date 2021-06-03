@@ -156,10 +156,10 @@
         "platforms": [
             {
                 "id": 0,
-                "move_x": 0,
-                "move_y": 1,
+                "move_x": 1,
+                "move_y": 0,
                 "direction": 1,
-                "speed": 2
+                "speed": 3
             },
             {
                 "id": 1,
@@ -167,26 +167,93 @@
                 "move_y": 1,
                 "direction": 1,
                 "speed": 2
+            },
+            {
+                "id": 2,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": -1,
+                "speed": 2
+            },
+            {
+                "id": 3,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": -1,
+                "speed": 3
+            },
+            {
+                "id": 4,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": -1,
+                "speed": 2
+            },
+            {
+                "id": 5,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 3
+            },{
+                "id": 6,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 3
+            },{
+                "id": 7,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },{
+                "id": 8,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },{
+                "id": 9,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            },{
+                "id": 10,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            },{
+                "id": 11,
+                "move_x": 0,
+                "move_y": 1,
+                "direction": 1,
+                "speed": 2
+            },{
+                "id": 12,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 2
+            },{
+                "id": 13,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": -1,
+                "speed": 3
+            },{
+                "id": 14,
+                "move_x": 1,
+                "move_y": 0,
+                "direction": 1,
+                "speed": 3
             }
         ]
     },
     "level_9": {
         "COLS": 200,
-        "platforms": [
-            {
-                "id": 0,
-                "move_x": 0,
-                "move_y": 1,
-                "direction": 1,
-                "speed": 2
-            },
-            {
-                "id": 1,
-                "move_x": 0,
-                "move_y": 1,
-                "direction": 1,
-                "speed": 2
-            }
-        ]
+        "platforms": []
     }
 }

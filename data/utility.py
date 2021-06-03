@@ -16,8 +16,9 @@ def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, pl
 
 #main function for drawing texts
 def draw_text(text, size, color, surface, x, y, draw_position, TILE_SIZE):
+    text = text.upper()
     size = (TILE_SIZE / 100) * size
-    font = pygame.font.Font('platformer/data/font/kenvector_future.ttf', round(size))
+    font = pygame.font.Font('platformer/data/font/caramel_sweets.ttf', round(size))
     textobj = font.render(text, 1, color)
     textrect = textobj.get_rect()
     if draw_position == 'midtop':
@@ -34,22 +35,19 @@ def draw_text(text, size, color, surface, x, y, draw_position, TILE_SIZE):
     surface.blit(textobj, textrect)
 
 # is entity close check
-def is_close(object1, object2, distance):
-    return math.hypot(object2.centerx-object1.centerx, object2.centery-object1.centery) < float(distance)
+def is_close(object1_rect, object2_rect, distance):
+    return math.hypot(object2_rect.centerx-object1_rect.centerx, object2_rect.centery-object1_rect.centery) < float(distance)
 
 def load_images(type_of_image_and_sprite):
-    num_of_images = len(os.listdir(
-                    f'platformer/data/images/{type_of_image_and_sprite}'))
     images = []
-    for i in range(num_of_images):
+    for i in os.listdir(f'platformer/data/images/{type_of_image_and_sprite}'):
         new_image = pygame.image.load(
-            f'platformer/data/images/{type_of_image_and_sprite}/{i}.png').convert_alpha()
+            f'platformer/data/images/{type_of_image_and_sprite}/{i}').convert_alpha()
         images.append(new_image)
     
     return images
 
 def load_sounds():
-    # num_of_items_in_folder = len(os.listdir(f'platformer/data/sounds'))
     dict = {}
     name = ''
     for file in os.listdir(f'platformer/data/sounds/sfx'):

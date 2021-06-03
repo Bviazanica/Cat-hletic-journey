@@ -4,7 +4,8 @@ import os
 import csv
 import random
 from pygame import Vector2
-from pygame import mouse
+from pygame import draw
+from pygame.cursors import arrow
 from pygame.locals import *
 from data.button import Button
 from data.camera.camera import *
@@ -26,7 +27,8 @@ Clock = pygame.time.Clock()
 FPS = 60
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = int(SCREEN_WIDTH * 0.8)
-FULLSCREEN = False
+flags = FULLSCREEN | DOUBLEBUF
+
 # define game variables
 GRAVITY = round(SCREEN_HEIGHT / 12)
 GRAVITY_FORCE_LIMIT = round(SCREEN_HEIGHT / 50)
@@ -77,17 +79,22 @@ level_cols = json_data['level_1']['COLS']
 intro_scene = True
 tutorial = True
 music_que = music_list[2:-1]
-
+global new_resolution
+new_resolution = False
 blue_fish_image = pygame.image.load(
     f'platformer/data/images/entities/Fish/Idle/0.png').convert_alpha()
 
 dead_fish = load_images('entities/Dead_fish')
+background_images = load_images('backgrounds/game_background')
 
 cloud_image = pygame.image.load(
     f'platformer/data/images/entities/Cloud/cloud.png').convert_alpha()
-
+arrow_image = pygame.image.load(
+    f'platformer/data/images/interface/arrow.png').convert_alpha()
 button_clicked = pygame.image.load(
-    f'platformer/data/images/interface/button_1.png').convert_alpha()
+    f'platformer/data/images/interface/long.png').convert_alpha()
+
+button_clicked = pygame.transform.smoothscale(button_clicked, (4*TILE_SIZE, TILE_SIZE))
 sound_on = pygame.image.load(
     f'platformer/data/images/interface/sound_on.png').convert_alpha()
 sound_off = pygame.image.load(
@@ -97,8 +104,14 @@ toggle_on = pygame.image.load(
 toggle_off = pygame.image.load(
     f'platformer/data/images/interface/toggle_off.png').convert_alpha()
 
-toggle_on = pygame.transform.smoothscale(toggle_on, (TILE_SIZE*2, TILE_SIZE))
-toggle_off = pygame.transform.smoothscale(toggle_off, (TILE_SIZE*2, TILE_SIZE))
+start_icon = pygame.image.load(
+    f'platformer/data/images/interface/play.png').convert_alpha()
+settings_icon = pygame.image.load(
+    f'platformer/data/images/interface/settings.png').convert_alpha()
+credits_icon = pygame.image.load(
+    f'platformer/data/images/interface/profile.png').convert_alpha()
+quit_icon = pygame.image.load(
+    f'platformer/data/images/interface/cancel.png').convert_alpha()
 
 fake_platform_green = pygame.image.load(
     f'platformer/data/images/tiles/68.png').convert_alpha()
@@ -108,21 +121,9 @@ fake_ground_green = pygame.image.load(
 health_image = pygame.image.load(
     f'platformer/data/images/other/health.png').convert_alpha()
 
-sky_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/sky.png').convert_alpha()
-rocks_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/rocks_1.png').convert_alpha()
-mountain_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/rocks_2.png').convert_alpha()
-clouds1_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_1.png').convert_alpha()
-clouds2_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_2.png').convert_alpha()
-clouds3_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_3.png').convert_alpha()
-clouds4_background_image = pygame.image.load(
-    f'platformer/data/images/backgrounds/level1/clouds_4.png').convert_alpha()
-
+menu_background_image = pygame.image.load(
+    f'platformer/data/images/menu/menu_background/1.png').convert_alpha()
+menu_background_image = pygame.transform.smoothscale(menu_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 bubble_item_image = pygame.image.load(
     f'platformer/data/images/tiles/57.png').convert_alpha()
 boost_item_image = pygame.image.load(
@@ -152,10 +153,24 @@ effect_durations = {
     'Bubble':5000,
     'Boost':5000
 }
-
-background_images = [sky_background_image, rocks_background_image, mountain_background_image, \
-                    clouds1_background_image, clouds2_background_image, clouds3_background_image, \
-                        clouds4_background_image]
+# store tiles in a list
+img_list = []
+for x in range(TILE_TYPES):
+    img = pygame.image.load(f'platformer/data/images/tiles/{x}.png').convert_alpha()
+    if x == 210 or x == 211:
+        img = pygame.transform.smoothscale(img, (TILE_SIZE - TILE_SIZE//5, round(
+            TILE_SIZE/(img.get_width()/img.get_height()))))
+    elif x == 263:
+        img = pygame.transform.scale(img, (TILE_SIZE*2, 
+            TILE_SIZE))
+    elif x in (75,76,77):
+        img = pygame.transform.smoothscale(img, (round(TILE_SIZE/1.5), 
+            round(TILE_SIZE/1.5)))
+    elif x in (95,96):
+        img = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
+    else:
+        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+    img_list.append(img)
 
 
 # create sprite groups
@@ -201,12 +216,15 @@ class Tutorial:
         self.text_counter = 0
         self.time_in_scene = 0
 
+        self.skip = False
+
     def update(self, time_passed, tick):
         self.current_time = time_passed
         pressed = pygame.key.get_pressed()
-        enter = pressed[pygame.K_RETURN]
         self.player.set_action(int(Animation_type.Idle))
-        if enter  and self.current_time - self.started_time > 1000:
+        if self.skip == 0:
+            self.skip = pressed[pygame.K_RETURN]
+        if self.skip and self.current_time - self.started_time > 1000:
             sfx_dic['skip'].play()
             self.cut_scene_running = False
             self.player.locked = False
@@ -249,7 +267,7 @@ class Tutorial:
             if self.step == 0:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/2,
@@ -260,7 +278,7 @@ class Tutorial:
             if self.step == 1:
                 draw_text(
                     self.text['two'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/2,
@@ -294,13 +312,16 @@ class CutSceneOne:
         self.text_counter = 0
         self.time_in_scene = 0
 
+        self.skip = False
+
     def update(self, time_passed, tick):
         self.current_time = time_passed
         
         pressed = pygame.key.get_pressed()
-        enter = pressed[pygame.K_RETURN]
         self.last_text_counter = self.text_counter
-        if enter:
+        if self.skip == 0:
+            self.skip = pressed[pygame.K_RETURN]
+        if self.skip:
             sfx_dic['skip'].play()
             self.cut_scene_running = False
             exit = random.choice(exit_group.sprites())
@@ -377,7 +398,7 @@ class CutSceneOne:
             if self.step == 2:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
@@ -403,7 +424,7 @@ class CutSceneTwo:
         self.dialogue_in_progress = False
 
         self.text = {
-            'one': "I will take 20 of your fishes...",
+            'one': "I will take 30 of your fishes...",
             'two-option-1': "You can go on...",
             'two-option-2': "You didn't bring enough..."
         }
@@ -411,15 +432,18 @@ class CutSceneTwo:
         self.last_text_counter = 0
         self.text_counter = 0
         self.time_in_scene = 0
+        
+        self.skip = False
 
     def update(self, time_passed, tick):
         self.current_time = time_passed
         pressed = pygame.key.get_pressed()
-        enter = pressed[pygame.K_RETURN]
-        if enter:
+        if self.skip == 0:
+            self.skip = pressed[pygame.K_RETURN]
+        if self.skip:
             sfx_dic['skip'].play()
             self.cut_scene_running = False
-            if self.player.fish >= 40:
+            if self.player.fish >= 30:
                 exit = random.choice(exit_group.sprites())
                 self.player.rect.x = exit.rect.x
                 self.player.locked = False
@@ -458,7 +482,7 @@ class CutSceneTwo:
                 self.new_step = False
                 self.image = guard_head_image
 
-            if self.player.fish >= 40:
+            if self.player.fish >= 30:
                 if int(self.text_counter) < len(self.text['two-option-1']):
                     self.text_counter += 0.2
                     self.dialogue_in_progress = True
@@ -469,7 +493,7 @@ class CutSceneTwo:
                     self.new_step = True
                     self.text_counter = 0
                     
-            elif self.player.fish < 40:
+            elif self.player.fish < 30:
                 if int(self.text_counter) < len(self.text['two-option-2']):
                     self.dialogue_in_progress = True
                     self.text_counter += 0.2
@@ -484,14 +508,14 @@ class CutSceneTwo:
             if self.new_step:
                 self.new_step = False
 
-            if self.player.fish >= 40:
+            if self.player.fish >= 30:
                 self.guard.set_action(int(Animation_type.Extra))
                 self.guard.frame_index = 1
                 self.player.speed = 3*TILE_SIZE
                 self.player.rect.x += self.player.speed * tick
                 self.player.set_action(int(Animation_type.Walk))
 
-            elif self.player.fish < 40:
+            elif self.player.fish < 30:
                 self.guard.set_action(int(Animation_type.Extra))
                 self.guard.frame_index = 0
                 self.player.speed = 3*TILE_SIZE
@@ -519,7 +543,7 @@ class CutSceneTwo:
             if self.step == 1:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
@@ -527,10 +551,10 @@ class CutSceneTwo:
                     'topleft',
                     TILE_SIZE
                 )
-            elif self.step == 2 and self.player.fish >= 40:
+            elif self.step == 2 and self.player.fish >= 30:
                 draw_text(
                     self.text['two-option-1'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
@@ -538,10 +562,10 @@ class CutSceneTwo:
                     'topleft',
                     TILE_SIZE
                 )
-            elif self.step == 2 and self.player.fish < 40:
+            elif self.step == 2 and self.player.fish < 30:
                 draw_text(
                     self.text['two-option-2'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
@@ -583,11 +607,14 @@ class FinalCutScene:
         self.text_counter = 0
         self.time_in_scene = 0
 
+        self.skip = False
+
     def update(self, time_passed, tick):
         self.current_time = time_passed
         pressed = pygame.key.get_pressed()
-        enter = pressed[pygame.K_RETURN]
-        if enter:
+        if self.skip == 0:
+            self.skip = pressed[pygame.K_RETURN]
+        if self.skip and self.step < 5:
             sfx_dic['skip'].play()
             self.new_step = True
             self.step = 5
@@ -751,7 +778,7 @@ class FinalCutScene:
             if self.step == 2:
                 draw_text(
                     self.text['one'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
@@ -762,7 +789,7 @@ class FinalCutScene:
             if self.step == 3:
                 draw_text(
                     self.text['two'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
@@ -773,7 +800,7 @@ class FinalCutScene:
             if self.step == 4:
                 draw_text(
                     self.text['three'][0:int(self.text_counter)],
-                    40,
+                    60,
                     WHITE,
                     canvas,
                     SCREEN_WIDTH/4,
@@ -785,7 +812,7 @@ class FinalCutScene:
             if self.step == 6:
                 draw_text(
                         self.text['four'][0:int(self.text_counter)],
-                        70,
+                        100,
                         WHITE,
                         canvas,
                         SCREEN_WIDTH/2,
@@ -797,7 +824,7 @@ class FinalCutScene:
             elif self.step == 7:
                 draw_text(
                         self.text['five'][0:int(self.text_counter)],
-                        70,
+                        100,
                         WHITE,
                         canvas,
                         SCREEN_WIDTH/2,
@@ -807,7 +834,7 @@ class FinalCutScene:
                 )
                 draw_text(
                         self.text['six'][0:int(self.text_counter)],
-                        70,
+                        100,
                         WHITE,
                         canvas,
                         SCREEN_WIDTH/2,
@@ -829,6 +856,8 @@ class CutSceneManager:
         self.window_size = 0
 
         self.canvas_height = self.canvas.get_height()
+
+        self.skip_button = Button(SCREEN_WIDTH * 0.9, SCREEN_HEIGHT * 0.9, 'Skip', '', arrow_image, 0)
 
     def start_cut_scene(self, cut_scene):
         if cut_scene.name not in self.cut_scenes_complete:
@@ -859,21 +888,23 @@ class CutSceneManager:
             pygame.draw.rect(self.canvas, BLACK,
                              (0, SCREEN_HEIGHT-self.window_size, self.canvas.get_width(), self.window_size))
             
-            if self.window_size >= self.canvas_height*0.2 and self.cut_scene.dialogue_in_progress:
-                canvas.blit(self.cut_scene.image, (SCREEN_WIDTH/10, self.canvas_height - self.canvas_height*0.01 - self.cut_scene.image.get_height()))
+            if self.window_size >= self.canvas_height*0.2:
+                draw_text('Enter to skip', 40, WHITE, canvas, self.skip_button.rect.right, self.skip_button.rect.bottom, 'topright', TILE_SIZE)
+                if self.skip_button.draw(canvas, TILE_SIZE):
+                    self.cut_scene.skip = 1
+                if self.cut_scene.dialogue_in_progress:
+                    canvas.blit(self.cut_scene.image, (SCREEN_WIDTH/10, self.canvas_height - self.canvas_height*0.01 - self.cut_scene.image.get_height()))
             # Draw specific cut scene details
             self.cut_scene.draw(self.canvas)
 
 
 def draw_background(canvas, offset_x, offset_y, background_images):
-    draw_range = 3
-    if level_cols > 150:
-        draw_range = 4
-    for x in range(draw_range):
-        parallax_variable = 0.1
-        for image in background_images:
-            canvas.blit(image, ((x * SCREEN_WIDTH - round(offset_x * parallax_variable)), 0 - offset_y*parallax_variable))
-            parallax_variable += 0.05
+    # for x in range(3):
+    #     parallax_variable = 0.1
+    #     for image in background_images:
+    #         canvas.blit(image, ((x * SCREEN_WIDTH - round(offset_x * parallax_variable)), 0 - offset_y*parallax_variable))
+    #         parallax_variable += 0.05
+    pass
 
 # load all images & animations
 def load_entity_animations():
@@ -1069,13 +1100,13 @@ class World():
                             int(len(platform) * TILE_SIZE), int(TILE_SIZE)))
 
                         self.platforms.append(Platform(
-                            platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id, 3*TILE_SIZE, level))
+                            platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id, level))
                         platform_id += 1
                         platform = []
                         print(f'platform_id PLOSINA: {platform_id}')
                     elif tile == 74:
                         self.platforms.append(Platform(
-                            x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id,3*TILE_SIZE, level))
+                            x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id, level))
                         platform_id += 1
                         print(f'platform_id SINGLE: {platform_id}')
                     elif tile in (41,61,63,64,86,87,75,76,77,120,165):
@@ -1233,7 +1264,7 @@ class Entity(pygame.sprite.Sprite):
         self.local_time = 0
         self.air_timer = 0
 
-        self.fish = 0
+        self.fish = 2
         self.checkpoint_position = vec(0, 0)
 
         self.invulnerability = False
@@ -1251,7 +1282,7 @@ class Entity(pygame.sprite.Sprite):
         self.collision_treshold = 25
 
         if self.entity_id == 0:
-            self.health_points = 3
+            self.health_points = 1
         elif self.entity_id == 3:
             self.health_points = 2
             self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
@@ -1282,7 +1313,6 @@ class Entity(pygame.sprite.Sprite):
             if self.boosted and self.local_time - self.boost_start_time > effect_durations['Boost']:
                 self.speed = 6*TILE_SIZE
                 self.boosted = False
-
         #if outside of bounds, gets hurt
         if self.rect.x > world.get_world_length() or self.rect.x + self.rect.width < 0 or \
                         self.rect.y + self.rect.height < 0 or self.rect.y > SCREEN_HEIGHT:
@@ -1491,7 +1521,10 @@ class Entity(pygame.sprite.Sprite):
     
     #flyingman behavior
     def ai(self, player, tick):
-        self.acceleration += self.seek_with_approach(player.rect.center, tick)
+        if is_close(self.rect, player.rect, SCREEN_WIDTH):
+            self.acceleration += self.seek_with_approach(player.rect.center, tick)
+        else:
+            self.acceleration = Vector2(0,0)
         self.avoid_sprites(enemies_group)
         self.rect.center += self.acceleration
 
@@ -1583,7 +1616,6 @@ class Entity(pygame.sprite.Sprite):
                     else:
                         self.in_death_animation = True
                         if self.entity_id == 0:
-                            # sfx_dic['death'].play()
                             pygame.mixer.music.fadeout(1000)
                         else:
                             sfx_dic['hit'].play()
@@ -1648,8 +1680,8 @@ class Entity(pygame.sprite.Sprite):
         else:
             canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
                                                                                 offset_x), round(self.rect.y - offset_y)))  
-        pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
-                                                   round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                                                                                                      
+        # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
+        #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                                                                                                      
         # bubble rect on player                                                                                
         if self.entity_id == 0:
             bubble_rect = bubble_image.get_rect()
@@ -1659,7 +1691,7 @@ class Entity(pygame.sprite.Sprite):
 
     #draw amount of fish player collected
     def draw_fish(self, canvas):
-        draw_text(f'x {self.fish}', 30, WHITE, canvas, round(TILE_SIZE*1.5), TILE_SIZE//2, 'topleft', TILE_SIZE)
+        draw_text(str(self.fish), 100, WHITE, canvas, int(TILE_SIZE*1.75), TILE_SIZE//8, 'topleft',  TILE_SIZE)
         canvas.blit(blue_fish_image, (TILE_SIZE//4, TILE_SIZE//4))
 
     #draw health of player
@@ -1715,7 +1747,7 @@ class PlatformPart(pygame.sprite.Sprite):
 
 # moving platform
 class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, parts, surface, id,speed, level):
+    def __init__(self, x, y, parts, surface, id, level):
         pygame.sprite.Sprite.__init__(self)
         self.platform_id = id
         self.parts = parts
@@ -1765,7 +1797,7 @@ class Platform(pygame.sprite.Sprite):
             canvas.blit(self.image, (round(self.rect.x -
                                            offset_x), round(self.rect.y - offset_y)))
             # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
-                                                #    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            #                                        round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
         else:
             for x, part in enumerate(self.parts):
                 self.image.blit(part.image, (x*TILE_SIZE, 0))
@@ -1848,10 +1880,11 @@ class Water(pygame.sprite.Sprite):
 
     def collide_water(self, target, level):
         if pygame.sprite.collide_rect(self, target):
-            target.hurt(False, 'water')
-            if level == 8 and target.entity_id == 0:
+            if level != 8:
+                target.hurt(False, 'water')
+            elif level == 8 and target.entity_id == 0:
+                target.hurt(True, 'water')
                 return True
-              
 #Mystery box   
 class ItemBox(pygame.sprite.Sprite):
     def __init__(self, img, x, y, hits_to_break):
@@ -1891,8 +1924,8 @@ class Collectible(pygame.sprite.Sprite):
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, RED,
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, RED,
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
     def collect(self, player):
         if pygame.sprite.collide_rect(self, player):
@@ -2080,8 +2113,8 @@ class Spike(pygame.sprite.Sprite):
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))
-        pygame.draw.rect(canvas, RED,
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, RED,
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 #Snake class
 class Snake(pygame.sprite.Sprite):
@@ -2149,8 +2182,8 @@ class Snake(pygame.sprite.Sprite):
             canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
                                                                               offset_x), round(self.rect.y -
                                                                                              offset_y)))
-            pygame.draw.rect(canvas, RED,
-                            (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            # pygame.draw.rect(canvas, RED,
+            #                 (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 
     def update_animation(self):
@@ -2214,15 +2247,15 @@ class Checkpoint(pygame.sprite.Sprite):
         
         if is_lowest_id:
             if level != 9 and level != 8:
-                draw_text('start', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
+                draw_text('start', 45, WHITE, canvas, self.rect.centerx - offset_x, self.rect.y + self.rect.height/5 - offset_y, 'midtop', TILE_SIZE)
             elif level == 8:
-                draw_text('Run!', 30 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
+                draw_text('Run!', 50 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
             elif level == 9:
-                draw_text('good luck', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
+                draw_text('good luck', 40 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
         else:
-            draw_text('checkpoint', 20 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-        pygame.draw.rect(canvas, RED,
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            draw_text('checkpoint', 40 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
+        # pygame.draw.rect(canvas, RED,
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
     
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
@@ -2254,8 +2287,8 @@ class Cloud(pygame.sprite.Sprite):
     def draw(self, canvas, offset_x, offset_y):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))                                                                            
-        pygame.draw.rect(canvas, RED,
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, RED,
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 #Lever for items
 class Lever(pygame.sprite.Sprite):
@@ -2307,10 +2340,10 @@ class Lever(pygame.sprite.Sprite):
     def draw(self, canvas, offset_x, offset_y, level):
         canvas.blit(self.image, (round(self.rect.x -
                                        offset_x), round(self.rect.y - offset_y)))                                                                            
-        pygame.draw.rect(canvas, RED,
-                         (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+        # pygame.draw.rect(canvas, RED,
+        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
         if level == 3 and self.activation_time == 0:
-            draw_text('Press "E"', 30, WHITE, canvas, self.rect.centerx - offset_x, self.rect.top - TILE_SIZE/2 - offset_y, 'midtop', TILE_SIZE)
+            draw_text('Press "E"', 50, WHITE, canvas, self.rect.centerx - offset_x, self.rect.top - TILE_SIZE/2 - offset_y, 'midtop', TILE_SIZE)
     #resets lever effect
     def reset_to_default(self):
         self.image = self.images_list[1]
@@ -2349,10 +2382,15 @@ def game():
     global player_head_image
     global friend_head_image
     global guard_head_image
+    global blue_fish_image
+    global arrow_image
+    global toggle_off
+    global toggle_on
     global tutorial
     global BORDER_LEFT
     global BORDER_RIGHT
     global music_que
+    global img_list
     level_complete = False
     
     if not music_handler.paused:
@@ -2364,31 +2402,14 @@ def game():
         level = 0
     else:
         level = 1
-    # store tiles in a list
-    img_list = []
-    for x in range(TILE_TYPES):
-        img = pygame.image.load(f'platformer/data/images/tiles/{x}.png').convert_alpha()
-        if x == 210 or x == 211:
-            img = pygame.transform.smoothscale(img, (TILE_SIZE - TILE_SIZE//5, round(
-                TILE_SIZE/(img.get_width()/img.get_height()))))
-        elif x == 263:
-            img = pygame.transform.scale(img, (TILE_SIZE*2, 
-                TILE_SIZE))
-        elif x in (75,76,77):
-            img = pygame.transform.smoothscale(img, (round(TILE_SIZE/1.5), 
-                round(TILE_SIZE/1.5)))
-        elif x in (95,96):
-            img = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
-        else:
-            img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-        img_list.append(img)
-
-    running = True
+    
+    pygame.event.set_allowed([KEYDOWN, KEYUP, MUSIC_END, QUIT])
+    running = 1
     game_finished = False
     game_over = False
     boss_fight = False
     start_fight = False
-    new_stage = True
+    new_stage = False
     stage = 0
     current_time = 0
     timer = 0
@@ -2399,20 +2420,21 @@ def game():
 
     last_camera_coord = 0.0,0.0
 
-    health_image = pygame.transform.smoothscale(
-            health_image, (TILE_SIZE, TILE_SIZE))
-    bubble_image = pygame.transform.smoothscale(
-            bubble_image, (TILE_SIZE*2, TILE_SIZE*2))
-    skull_image = pygame.transform.smoothscale(
-            skull_image, (TILE_SIZE*2, TILE_SIZE*2))
-    cage_opened_image = pygame.transform.smoothscale(
-            cage_opened_image, (TILE_SIZE*4, TILE_SIZE*5))
+
+    blue_fish_image = pygame.transform.smoothscale(blue_fish_image, (int(TILE_SIZE*1.4), int(TILE_SIZE*0.8)))
+    cage_opened_image = pygame.transform.smoothscale(cage_opened_image, (TILE_SIZE*4, TILE_SIZE*5))
+    bubble_image = pygame.transform.smoothscale(bubble_image, (TILE_SIZE*2, TILE_SIZE*2))
+    skull_image = pygame.transform.smoothscale(skull_image, (TILE_SIZE*2, TILE_SIZE*2))
+    health_image = pygame.transform.smoothscale(health_image, (TILE_SIZE, TILE_SIZE))
+    arrow_image = pygame.transform.smoothscale(arrow_image, (TILE_SIZE*2, TILE_SIZE))
+    toggle_off = pygame.transform.smoothscale(toggle_off, (TILE_SIZE*2, TILE_SIZE))
+    toggle_on = pygame.transform.smoothscale(toggle_on, (TILE_SIZE*2, TILE_SIZE))
 
     #transforming images to right size
     scenes_head_images = transform_images([player_head_image, friend_head_image, guard_head_image], TILE_SIZE*2, TILE_SIZE*2, True)
-    background_images = transform_images(background_images, SCREEN_WIDTH, SCREEN_HEIGHT, True)
-    random_images = transform_images([fake_platform_green, fake_ground_green], TILE_SIZE, TILE_SIZE, False)
     cage_related_images = transform_images([cage_back_image, cage_closed_image], TILE_SIZE*2, TILE_SIZE*5, True)
+    random_images = transform_images([fake_platform_green, fake_ground_green, ], TILE_SIZE, TILE_SIZE, False)
+    background_images = transform_images(background_images, SCREEN_WIDTH, SCREEN_HEIGHT, True)
 
     #returning images to use
     player_head_image, friend_head_image, guard_head_image = return_images_from_list(scenes_head_images)
@@ -2420,7 +2442,7 @@ def game():
     fake_platform_green, fake_ground_green = return_images_from_list(random_images)
     world, player, camera, all_platforms, invisible_blocks, \
     level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
-        0, img_list)
+        6, img_list)
 
     # Main game loop.
     while running:
@@ -2430,7 +2452,7 @@ def game():
         screen.fill(BLACK)
         canvas.fill(BLACK)
 
-        # print(Clock.get_fps())
+        
         if level_complete:
             world, player, camera, all_platforms, invisible_blocks,\
             level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
@@ -2467,7 +2489,10 @@ def game():
                 if not music_handler.paused:
                     if boss_fight == False and not stage == 4:
                         music_que = music_handler.music_que(music_que, music_list)
-                        
+            if event.type == KEYDOWN:
+               if event.key == K_ESCAPE:
+                   running = ingame_menu()
+
             if not player.locked:
                 # keyboard presses
                 if event.type == pygame.KEYDOWN:
@@ -2510,9 +2535,10 @@ def game():
                 player.set_action(int(Animation_type.Run))
             else:
                 player.set_action(int(Animation_type.Idle))
-
+        
         #camera update in levels
         if level == 8 and new_stage:
+            wingman.cooldowns['shoot'] = 8000
             new_stage = False
             camera_type = Auto(camera, player)
             camera.setmethod(camera_type)
@@ -2564,8 +2590,10 @@ def game():
             if wingman:
                 #wingman behavior in level
                 if level == 8:
+                    # print(f'{camera.offset.x, player.rect.x + player.rect.width}??')
                     if player.rect.x + player.rect.width < camera.offset.x and not player.in_death_animation:
                         player.hurt(True, 'Border')
+                        
                         camera.offset.x = 0
                         projectiles_group.empty()
                     if player.rect.x + player.rect.width + 20*TILE_SIZE> world.get_world_length():
@@ -2763,8 +2791,13 @@ def game():
                         player.checkpoint_position = checkpoint.rect.centerx, checkpoint.rect.y + TILE_SIZE - player.rect.height
                         
                 elif level == 8:
-                    if not new_camera and checkpoint.active == False:
-                        new_stage = True
+                    if not new_camera:
+                        if checkpoint.active == False:
+                            new_stage = True
+                        elif player.rect.x > checkpoint.rect.right:
+                            checkpoint.active = False
+                            player.checkpoint_position = checkpoint.rect.centerx, checkpoint.rect.y + TILE_SIZE - player.rect.height
+                            new_stage = True
 
             for lever in levers_group:
                 lever.update(current_time, snakes_group)
@@ -2804,8 +2837,9 @@ def game():
             
             # adjust camera to player
             if bool(camera):
-                if level == 8 and new_camera and not player.in_death_animation:
-                    camera.offset.x += 4*TILE_SIZE * tick 
+                if level == 8 and new_camera:
+                    if not player.in_death_animation:
+                        camera.offset.x += 2*TILE_SIZE * tick 
                 else:
                     camera.scroll()
 
@@ -2873,6 +2907,7 @@ def game():
                 if collision:
                     camera.offset.x = 0
                     projectiles_group.empty()
+                        
                 water.draw(canvas, offset_x, offset_y)
 
             for fish in fish_group:
@@ -2895,7 +2930,7 @@ def game():
                 guard.draw(canvas, offset_x, offset_y)
 
             player.draw(canvas, offset_x, offset_y)
-            if not level == 9:
+            if level != 9 and level != 8:
                 player.draw_fish(canvas)
             player.draw_health(canvas)
 
@@ -2926,13 +2961,15 @@ def game():
         #finish game and return to menu
         if game_finished and not player.alive:
             running = False
-          
+        draw_text(str(Clock.get_fps()), 50, RED , canvas, SCREEN_WIDTH//2, SCREEN_HEIGHT*0.1, 'midtop', TILE_SIZE)
         cut_scene_manager.draw()    
-        screen.blit(canvas, (0, 0))
-        pygame.display.update()
+        if running:
+            screen.blit(canvas, (0, 0))
+            pygame.display.flip()
 
 #game over screen
 def game_over_menu(player, level, img_list):
+    global menu_background_image
     global music_que
     world = None
     camera = None
@@ -2948,29 +2985,48 @@ def game_over_menu(player, level, img_list):
     texts = ['Restart', 'Back to menu']
     number_of_buttons = 2
     buttons = []
-    for x, button in enumerate(range(number_of_buttons)):
-        button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, 'menu', texts[x],button_clicked, x)
-        buttons.append(button)
-
-    for button in buttons:
-        if button.draw(canvas, TILE_SIZE):
-            if clickable:
-                if button.button_id == 0:
-                    world, player, camera, all_platforms, invisible_blocks, \
-                    level, cut_scene_manager, BORDER_LEFT, BORDER_RIGHT = load_level(
-                        1, img_list)
-                    if not music_handler.paused:
-                        music_que = music_handler.music_que([], music_list)
-                elif button.button_id == 1:
+    running = 1
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
                     pygame.quit()
                     sys.exit()
-                clickable = False
+        for x, button in enumerate(range(number_of_buttons)):
+            button = Button(SCREEN_WIDTH//3 + SCREEN_WIDTH*0.3*x, SCREEN_HEIGHT*0.7, texts[x], texts[x],button_clicked, x)
+            buttons.append(button)
 
-    return world, player, camera, all_platforms, invisible_blocks, level
+        for button in buttons:
+            if button.draw(canvas, TILE_SIZE):
+                if clickable:
+                    if button.button_id == 0:
+                        world, player, camera, all_platforms, invisible_blocks, \
+                        level, cut_scene_manager, BORDER_LEFT, BORDER_RIGHT = load_level(
+                            1, img_list)
+                        if not music_handler.paused:
+                            music_que = music_handler.music_que([], music_list)
+                        
+                        return world, player, camera, all_platforms, invisible_blocks, level
+                    elif button.button_id == 1:
+                        pygame.quit()
+                        sys.exit()
+                    clickable = False
+        # death_image = pygame.image.load(f'platformer/data/images/menu/player/death/0.png').convert_alpha()
+        # death_image = pygame.transform.smoothscale(death_image, (4*TILE_SIZE, 2*TILE_SIZE))
+        # canvas.blit(death_image, (SCREEN_WIDTH*0.4, SCREEN_HEIGHT*0.4))
+        draw_text('Game over', 200, WHITE, canvas, SCREEN_WIDTH*0.5, SCREEN_HEIGHT*0.3, 'midtop', TILE_SIZE)
+        
+        clickable = True
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
 
 #main menu
 def main_menu():
+    global menu_background_image
+    global new_resolution
     pygame.mixer.music.load(f'platformer/data/sounds/music/main_menu_music.mp3')
     pygame.mixer.music.play(-1, 0.0, 2500)
     texts = ['Start', 'Settings', 'Credits', 'Quit']
@@ -2978,13 +3034,43 @@ def main_menu():
     number_of_buttons = 4
     buttons = []
     for x, button in enumerate(range(number_of_buttons)):
-        button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//10 +
-                        x*button_clicked.get_height()*2, 'menu', texts[x], button_clicked, x)
+        button = Button(SCREEN_WIDTH*0.8, SCREEN_HEIGHT//10 +
+                        x*TILE_SIZE*2, texts[x], texts[x], button_clicked, x)
         buttons.append(button)
     running = True
     clickable = False
+    player = Entity(0, SCREEN_WIDTH * 0.5, SCREEN_HEIGHT*0.7, 0)
+    friend = Entity(6,  SCREEN_WIDTH * 0.6, SCREEN_HEIGHT*0.75, 0)
+    player.animation_list = load_images('menu/player/jump')
+    friend.animation_list = load_images('menu/friend/jump')
+
+    menu_icons = transform_images([start_icon, settings_icon, credits_icon, quit_icon], int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
+
+    player.animation_list = transform_images(player.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
+    friend.animation_list = transform_images(friend.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
+    # friend.flip = True
+    anim_frame = 0
+    last_update = 0
+    current_time = 0
     while running:
+        time_per_frame = Clock.tick(FPS)
+        tick = time_per_frame / 1000.0
+        current_time += time_per_frame
         canvas.fill(BLACK)
+        canvas.blit(menu_background_image, (0,0))
+        if new_resolution:
+            player.animation_list = transform_images(player.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
+            friend.animation_list = transform_images(friend.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
+            player.rect.topleft = SCREEN_WIDTH * 0.5, SCREEN_HEIGHT*0.7
+            friend.rect.topleft = SCREEN_WIDTH * 0.6, SCREEN_HEIGHT*0.75
+            for button in buttons:
+                button.image = pygame.transform.smoothscale(button.image, (4*TILE_SIZE, TILE_SIZE))
+                button.rect.right = SCREEN_WIDTH*0.9
+                button.rect.y = SCREEN_HEIGHT//10+ TILE_SIZE*2*button.button_id
+            menu_icons = transform_images([start_icon, settings_icon, credits_icon, quit_icon], int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
+            new_resolution = False
+
+        print(player.image)
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -2994,8 +3080,21 @@ def main_menu():
                     pygame.quit()
                     sys.exit()
 
+        if current_time - last_update > 120:
+            if anim_frame < 5:
+                anim_frame += 1
+                last_update = current_time
+            else:
+                anim_frame = 0
+                last_update = current_time
+
+        player.image = player.animation_list[anim_frame]
+        friend.image = friend.animation_list[anim_frame]
+
+        player.draw(canvas, 0, 0)
+        friend.draw(canvas, 0, 0)
+
         for button in buttons:
-            button.rect.centerx = SCREEN_WIDTH//2
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
                     if button.button_id == 0:
@@ -3010,18 +3109,32 @@ def main_menu():
                     elif button.button_id == 3:
                         pygame.quit()
                         sys.exit()
-        
-       
+
+            canvas.blit(menu_icons[button.button_id], (button.rect.x - TILE_SIZE, button.rect.y - TILE_SIZE/4))
+
+        draw_text('Game', 250, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
+        draw_text('name', 200, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.95, 'left', TILE_SIZE)
         clickable = True
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
+def ingame_menu():
+    global menu_background_image
+    x = 0
+    texts = ['Resume', 'Audio', 'Controls', 'Main Menu']
+    number_of_buttons = 4
+    buttons = []
+    for x, button in enumerate(range(number_of_buttons)):
+        button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
+                        x*button_clicked.get_height()*2, texts[x], texts[x],button_clicked, x)
+        buttons.append(button)
 
-#credits section
-def show_credits():
+    clickable = False
     running = True
+
     while running:
         canvas.fill(BLACK)
+        canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -3029,24 +3142,62 @@ def show_credits():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-        draw_text('Credits', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
+                    return 1
+        for button in buttons:
+            if button.draw(canvas, TILE_SIZE):
+                if clickable:
+                    if button.button_id == 0:
+                        running = False
+                        print('clikc')
+                        return 1
+                    elif button.button_id == 1:
+                        audio()
+                    elif button.button_id == 2:
+                        controls()
+                    elif button.button_id == 3:
+                        print('clikc')
+                        return 0
+                    clickable = False
+
+        clickable = True
+        
+        screen.blit(canvas, (0, 0))
+        pygame.display.update()
+
+#credits section
+def show_credits():
+    global menu_background_image
+    running = True
+    while running:
+        canvas.fill(BLACK)
+        canvas.blit(menu_background_image, (0,0))
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    running = False
+        draw_text('Credits', 150, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
 #settings
 def settings():
+    global menu_background_image
     number_of_buttons = 3
     buttons = []
     texts = ['Audio', 'Resolution', 'Controls']
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, 'menu',texts[x], button_clicked, x)
+                        x*button_clicked.get_height()*2, texts[x],texts[x], button_clicked, x)
         buttons.append(button)
+    
     running = True
     clickable = False
     while running:
         canvas.fill(BLACK)
+        canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -3065,16 +3216,17 @@ def settings():
                     elif button.button_id == 2:
                         controls()
         clickable = True
-        draw_text('Settings', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
+        draw_text('Settings', 150, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
 #show controls
 def controls():
+    global menu_background_image
     running = True
     while running:
-        canvas.fill((0, 0, 0))
+        canvas.fill(BLACK)
+        canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -3082,13 +3234,13 @@ def controls():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-        draw_text('Controls', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
+        draw_text('Controls', 100, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
 #show controls
 def audio():
+    global menu_background_image
     number_of_buttons = 3
     buttons = []
     grey_rect_surface = pygame.Surface((4*TILE_SIZE,TILE_SIZE))
@@ -3112,6 +3264,7 @@ def audio():
     running = True
     while running:
         canvas.fill(BLACK)
+        canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -3132,7 +3285,7 @@ def audio():
                     music_handler.set_master_volume(sfx_dic, 1.0)
                     actual_volume_rect.width = buttons[0].rect.width
         for button in buttons:
-            draw_text(texts[button.button_id], 36, RED,
+            draw_text(texts[button.button_id], 50, RED,
                                       canvas, SCREEN_WIDTH*0.5, button.rect.centery, 'left',  TILE_SIZE)
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
@@ -3160,8 +3313,7 @@ def audio():
                         (buttons[0].rect.x, buttons[0].rect.y, actual_volume_rect.width, actual_volume_rect.height))
         clickable = True
 
-        draw_text('Audio', 72, WHITE,
-                                      canvas, SCREEN_WIDTH/10, SCREEN_HEIGHT*0.8, 'topleft', TILE_SIZE)
+        draw_text('Audio', 100, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
@@ -3175,17 +3327,21 @@ def resolutions():
     global GRAVITY
     global GRAVITY_FORCE_LIMIT
     global animations_list
+    global img_list
+    global menu_background_image
+    global new_resolution
     running = True
     number_of_buttons = 3
     buttons = []
     texts = ['800x640','1024x768','Fullscreen']
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, 'menu', texts[x], button_clicked, x)
+                        x*button_clicked.get_height()*2, texts[x], texts[x], button_clicked, x)
         buttons.append(button)
     clickable = False
     while running:
         canvas.fill(BLACK)
+        canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -3208,16 +3364,34 @@ def resolutions():
                         canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
                     elif button.button_id == 2:
                         SCREEN_WIDTH, SCREEN_HEIGHT = monitor_size
-                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
                         canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
                     TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
                     GRAVITY = round(SCREEN_HEIGHT / 12)
                     GRAVITY_FORCE_LIMIT = round(SCREEN_HEIGHT / 40)
                     animations_list = load_entity_animations()
-                
+                    menu_background_image = pygame.transform.smoothscale(menu_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+                    img_list = []
+                    for x in range(TILE_TYPES):
+                        img = pygame.image.load(f'platformer/data/images/tiles/{x}.png').convert_alpha()
+                        if x == 210 or x == 211:
+                            img = pygame.transform.smoothscale(img, (TILE_SIZE - TILE_SIZE//5, round(
+                                TILE_SIZE/(img.get_width()/img.get_height()))))
+                        elif x == 263:
+                            img = pygame.transform.scale(img, (TILE_SIZE*2, 
+                                TILE_SIZE))
+                        elif x in (75,76,77):
+                            img = pygame.transform.smoothscale(img, (round(TILE_SIZE/1.5), 
+                                round(TILE_SIZE/1.5)))
+                        elif x in (95,96):
+                            img = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
+                        else:
+                            img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                        img_list.append(img)
+                    new_resolution = True
         clickable = True
-        draw_text('Resolution', 72, WHITE,
-                                      canvas, SCREEN_WIDTH//2, 50, 'midtop', TILE_SIZE)
+        draw_text('Resolution', 100, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 

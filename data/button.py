@@ -7,6 +7,9 @@ import random
 
 class Button():
     def __init__(self, x, y, type, text,image, id):
+        self.x = x
+        self.y = y
+
         self.image = image
         self.button_id = id
         self.type = type
@@ -18,7 +21,6 @@ class Button():
 
     # draw plus action on click
     def draw(self, canvas, TILE_SIZE):
-        
         action = False
         # get mouse position
         pos = pygame.mouse.get_pos()
@@ -34,7 +36,10 @@ class Button():
 
         # draw button
         canvas.blit(self.image, self.rect)
-        draw_text(self.text, 70, (255,255,255), canvas, self.rect.centerx, self.rect.centery, 'center', TILE_SIZE)
-        # pygame.draw.rect(canvas, (122,22,100),
+        if self.type != 'back':
+            draw_text(self.text, 60, (255,255,255), canvas, self.rect.centerx, self.rect.centery, 'center', TILE_SIZE)
+        else:
+            draw_text(self.text, 50, (255,255,255), canvas, self.rect.x, self.rect.bottom, 'topleft', TILE_SIZE)
+        # pygame.draw.rect(canvas, (255,0,0),
         #                  (round(self.rect.x), round(self.rect.y ), self.rect.width, self.rect.height), 2)
         return action

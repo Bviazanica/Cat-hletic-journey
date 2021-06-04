@@ -16,23 +16,24 @@ def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, pl
 
 #main function for drawing texts
 def draw_text(text, size, color, surface, x, y, draw_position, TILE_SIZE):
-    text = text.upper()
-    size = (TILE_SIZE / 100) * size
-    font = pygame.font.Font('platformer/data/font/caramel_sweets.ttf', round(size))
-    textobj = font.render(text, 1, color)
-    textrect = textobj.get_rect()
-    if draw_position == 'midtop':
-        textrect.midtop = (x, y)
-    elif draw_position == 'topleft':
-        textrect.topleft = (x, y)
-    elif draw_position == 'center':
-        textrect.center = (x,y)
-    elif draw_position == 'topright':
-        textrect.topright = (x,y)
-    elif draw_position == 'left':
-        textrect.left = x
-        textrect.centery = y
-    surface.blit(textobj, textrect)
+    if text:
+        text = text.upper()
+        size = (TILE_SIZE / 100) * size
+        font = pygame.font.Font('platformer/data/font/caramel_sweets.ttf', round(size))
+        textobj = font.render(text, 1, color)
+        textrect = textobj.get_rect()
+        if draw_position == 'midtop':
+            textrect.midtop = (x, y)
+        elif draw_position == 'topleft':
+            textrect.topleft = (x, y)
+        elif draw_position == 'center':
+            textrect.center = (x,y)
+        elif draw_position == 'topright':
+            textrect.topright = (x,y)
+        elif draw_position == 'left':
+            textrect.left = x
+            textrect.centery = y
+        surface.blit(textobj, textrect)
 
 # is entity close check
 def is_close(object1_rect, object2_rect, distance):
@@ -46,6 +47,18 @@ def load_images(type_of_image_and_sprite):
         images.append(new_image)
     
     return images
+
+def load_images_to_dic(path):
+    dict = {}
+    name = ''
+    for file in os.listdir(f'platformer/data/images/{path}'):
+        new_image = pygame.image.load(
+            f'platformer/data/images/{path}/{file}').convert_alpha()
+        name = file
+        string_size = len(name)
+        sliced_name = name[:string_size - 4]
+        dict[sliced_name] = new_image
+    return dict
 
 def load_sounds():
     dict = {}

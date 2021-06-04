@@ -4,7 +4,6 @@ import os
 import csv
 import random
 from pygame import Vector2
-from pygame import draw
 from pygame.cursors import arrow
 from pygame.locals import *
 from data.button import Button
@@ -16,7 +15,7 @@ from data.json_reader import *
 from data.cut_scenes import *
 from data.globals import *
 from data.sound_handler import *
-
+import cProfile
 vec = pygame.math.Vector2
 
 mixer.init()
@@ -25,8 +24,9 @@ pygame.mixer.music.set_volume(0.5)
 music_handler = SoundHandler()
 Clock = pygame.time.Clock()
 FPS = 60
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = int(SCREEN_WIDTH * 0.8)
+monitor_size = [pygame.display.Info().current_w,pygame.display.Info().current_h]
+SCREEN_WIDTH = monitor_size[0]
+SCREEN_HEIGHT = monitor_size[1]
 flags = FULLSCREEN | DOUBLEBUF
 
 # define game variables
@@ -46,7 +46,7 @@ pygame.mixer.music.set_endevent(MUSIC_END)
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (240, 0, 0)
-GREEN = (0, 200, 0)
+GREEN = (0, 255, 127)
 BLUE = (0, 191, 255)
 YELLOW = (255, 255, 0)
 DARKGRAY = (40, 40, 40)
@@ -65,8 +65,8 @@ class Animation_type(IntEnum):
     Disappear = 9,
     Extra = 10
 
-monitor_size = [pygame.display.Info().current_w,pygame.display.Info().current_h]
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+# screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode(monitor_size, flags)
 canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
 #cursor
@@ -85,33 +85,20 @@ blue_fish_image = pygame.image.load(
     f'platformer/data/images/entities/Fish/Idle/0.png').convert_alpha()
 
 dead_fish = load_images('entities/Dead_fish')
-background_images = load_images('backgrounds/game_background')
+background_images = load_images('backgrounds/d')
+interface_images = load_images_to_dic('interface')
 
 cloud_image = pygame.image.load(
     f'platformer/data/images/entities/Cloud/cloud.png').convert_alpha()
-arrow_image = pygame.image.load(
-    f'platformer/data/images/interface/arrow.png').convert_alpha()
-button_clicked = pygame.image.load(
-    f'platformer/data/images/interface/long.png').convert_alpha()
+arrow_image = interface_images['arrow']
+button_long = interface_images['long']
 
-button_clicked = pygame.transform.smoothscale(button_clicked, (4*TILE_SIZE, TILE_SIZE))
-sound_on = pygame.image.load(
-    f'platformer/data/images/interface/sound_on.png').convert_alpha()
-sound_off = pygame.image.load(
-f'platformer/data/images/interface/sound_off.png').convert_alpha()
-toggle_on = pygame.image.load(
-    f'platformer/data/images/interface/toggle_on.png').convert_alpha()
-toggle_off = pygame.image.load(
-    f'platformer/data/images/interface/toggle_off.png').convert_alpha()
+button_long = pygame.transform.smoothscale(button_long, (4*TILE_SIZE, TILE_SIZE))
 
-start_icon = pygame.image.load(
-    f'platformer/data/images/interface/play.png').convert_alpha()
-settings_icon = pygame.image.load(
-    f'platformer/data/images/interface/settings.png').convert_alpha()
-credits_icon = pygame.image.load(
-    f'platformer/data/images/interface/profile.png').convert_alpha()
-quit_icon = pygame.image.load(
-    f'platformer/data/images/interface/cancel.png').convert_alpha()
+start_icon = interface_images['play']
+settings_icon = interface_images['settings']
+credits_icon = interface_images['profile']
+quit_icon = interface_images['cancel']
 
 fake_platform_green = pygame.image.load(
     f'platformer/data/images/tiles/68.png').convert_alpha()
@@ -899,12 +886,11 @@ class CutSceneManager:
 
 
 def draw_background(canvas, offset_x, offset_y, background_images):
-    # for x in range(3):
-    #     parallax_variable = 0.1
-    #     for image in background_images:
-    #         canvas.blit(image, ((x * SCREEN_WIDTH - round(offset_x * parallax_variable)), 0 - offset_y*parallax_variable))
-    #         parallax_variable += 0.05
-    pass
+    parallax_variable = 0.1
+    for image in background_images:
+        canvas.blit(image, ((0 - round(offset_x * parallax_variable)), 0 - offset_y*parallax_variable))
+        parallax_variable += 0.05
+
 
 # load all images & animations
 def load_entity_animations():
@@ -1220,14 +1206,11 @@ class World():
         return player, camera, self.platforms, self.invisible_blocks_list
 
     #draw all tiles
-    def draw(self, canvas, offset_x, offset_y):
+    def draw(self, canvas, offset_x, offset_y, player):
         for tile in self.obstacles_list:
-            canvas.blit(tile[0], (round(tile[1].x - offset_x),
-                                  round(tile[1].y - offset_y), tile[1].width, tile[1].height))
-            # pygame.draw.rect(canvas, RED,
-            #                  (round(tile[1].x - offset_x), round(tile[1].y - offset_y), tile[1].width, tile[1].height), 2)
-            # pygame.draw.rect(canvas, YELLOW,
-            #                  (tile[1].x, tile[1].y, tile[1].width, tile[1].height), 2)
+            if abs(tile[1].x - player.rect.x) < SCREEN_WIDTH + SCREEN_WIDTH//10:
+                canvas.blit(tile[0], (round(tile[1].x - offset_x),
+                                    round(tile[1].y - offset_y), tile[1].width, tile[1].height))
 
     def get_world_length(self):
         return self.level_length * TILE_SIZE
@@ -1264,7 +1247,7 @@ class Entity(pygame.sprite.Sprite):
         self.local_time = 0
         self.air_timer = 0
 
-        self.fish = 2
+        self.fish = 0
         self.checkpoint_position = vec(0, 0)
 
         self.invulnerability = False
@@ -1616,6 +1599,7 @@ class Entity(pygame.sprite.Sprite):
                     else:
                         self.in_death_animation = True
                         if self.entity_id == 0:
+                            sfx_dic['death'].play()
                             pygame.mixer.music.fadeout(1000)
                         else:
                             sfx_dic['hit'].play()
@@ -2384,8 +2368,6 @@ def game():
     global guard_head_image
     global blue_fish_image
     global arrow_image
-    global toggle_off
-    global toggle_on
     global tutorial
     global BORDER_LEFT
     global BORDER_RIGHT
@@ -2406,7 +2388,6 @@ def game():
     pygame.event.set_allowed([KEYDOWN, KEYUP, MUSIC_END, QUIT])
     running = 1
     game_finished = False
-    game_over = False
     boss_fight = False
     start_fight = False
     new_stage = False
@@ -2427,8 +2408,6 @@ def game():
     skull_image = pygame.transform.smoothscale(skull_image, (TILE_SIZE*2, TILE_SIZE*2))
     health_image = pygame.transform.smoothscale(health_image, (TILE_SIZE, TILE_SIZE))
     arrow_image = pygame.transform.smoothscale(arrow_image, (TILE_SIZE*2, TILE_SIZE))
-    toggle_off = pygame.transform.smoothscale(toggle_off, (TILE_SIZE*2, TILE_SIZE))
-    toggle_on = pygame.transform.smoothscale(toggle_on, (TILE_SIZE*2, TILE_SIZE))
 
     #transforming images to right size
     scenes_head_images = transform_images([player_head_image, friend_head_image, guard_head_image], TILE_SIZE*2, TILE_SIZE*2, True)
@@ -2442,17 +2421,14 @@ def game():
     fake_platform_green, fake_ground_green = return_images_from_list(random_images)
     world, player, camera, all_platforms, invisible_blocks, \
     level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
-        6, img_list)
+        level, img_list)
 
     # Main game loop.
     while running:
         time_per_frame = Clock.tick(FPS)
         tick = time_per_frame / 1000.0
         current_time += time_per_frame
-        screen.fill(BLACK)
         canvas.fill(BLACK)
-
-        
         if level_complete:
             world, player, camera, all_platforms, invisible_blocks,\
             level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
@@ -2464,11 +2440,20 @@ def game():
             tick = 0.2
 
         if player.alive == False:
-            if game_over == False:
-                sfx_dic['death_screen'].play()
-            game_over = True
-            world, player, camera, all_platforms, invisible_blocks, level \
+            sfx_dic['death_screen'].play()
+            world, player, camera, all_platforms, invisible_blocks, level, running \
                = game_over_menu(player,level, img_list)
+            game_finished = False
+            boss_fight = False
+            start_fight = False
+            new_stage = False
+            stage = 0
+            current_time = 0
+            timer = 0
+            counter = 0
+            new_camera = False
+            fishes = 0
+            player_health = 3 
 
         #only assign value if object exist
         guard = friend = wingman = None
@@ -2492,6 +2477,7 @@ def game():
             if event.type == KEYDOWN:
                if event.key == K_ESCAPE:
                    running = ingame_menu()
+                   player.moving_left = player.moving_right = False
 
             if not player.locked:
                 # keyboard presses
@@ -2850,7 +2836,7 @@ def game():
 
             # Draw methods
             draw_background(canvas, offset_x, offset_y, background_images)
-            world.draw(canvas, offset_x, offset_y)
+            world.draw(canvas, offset_x, offset_y, player)
 
             for decoration in decoration_group:
                 if decoration.type != 'fence':
@@ -2966,27 +2952,39 @@ def game():
         if running:
             screen.blit(canvas, (0, 0))
             pygame.display.flip()
+        
 
 #game over screen
 def game_over_menu(player, level, img_list):
     global menu_background_image
     global music_que
+    global interface_images
     world = None
     camera = None
     all_platforms = None
     invisible_blocks = None
     level = None
     clickable = True
+    texts = ['Restart', 'Menu']
 
     if not music_handler.paused:
         pygame.mixer.music.stop()
 
-    x = 0
-    texts = ['Restart', 'Back to menu']
     number_of_buttons = 2
     buttons = []
+    icons = [interface_images['play'], interface_images['home']]
+    icons = transform_images(icons, int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
+    button_long = interface_images['long']
+    button_long = pygame.transform.smoothscale(button_long, (4*TILE_SIZE, TILE_SIZE))
+    for x, button in enumerate(range(number_of_buttons)):
+            button = Button(SCREEN_WIDTH//3 + SCREEN_WIDTH*0.3*x, SCREEN_HEIGHT*0.7, texts[x], texts[x],button_long, x)
+            buttons.append(button)
+            icon_button = Button(button.rect.x, button.rect.centery, 'icon', '', icons[x], x)
+            buttons.append(icon_button)
+            
     running = 1
     while running:
+        canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -2995,13 +2993,11 @@ def game_over_menu(player, level, img_list):
                 if event.key == K_ESCAPE:
                     pygame.quit()
                     sys.exit()
-        for x, button in enumerate(range(number_of_buttons)):
-            button = Button(SCREEN_WIDTH//3 + SCREEN_WIDTH*0.3*x, SCREEN_HEIGHT*0.7, texts[x], texts[x],button_clicked, x)
-            buttons.append(button)
-
+        
         for button in buttons:
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
+                    sfx_dic['click'].play()
                     if button.button_id == 0:
                         world, player, camera, all_platforms, invisible_blocks, \
                         level, cut_scene_manager, BORDER_LEFT, BORDER_RIGHT = load_level(
@@ -3009,15 +3005,18 @@ def game_over_menu(player, level, img_list):
                         if not music_handler.paused:
                             music_que = music_handler.music_que([], music_list)
                         
-                        return world, player, camera, all_platforms, invisible_blocks, level
+                        return world, player, camera, all_platforms, invisible_blocks, level, 1
                     elif button.button_id == 1:
-                        pygame.quit()
-                        sys.exit()
+                        return world, player, camera, all_platforms, invisible_blocks, level, 0
                     clickable = False
-        # death_image = pygame.image.load(f'platformer/data/images/menu/player/death/0.png').convert_alpha()
-        # death_image = pygame.transform.smoothscale(death_image, (4*TILE_SIZE, 2*TILE_SIZE))
-        # canvas.blit(death_image, (SCREEN_WIDTH*0.4, SCREEN_HEIGHT*0.4))
-        draw_text('Game over', 200, WHITE, canvas, SCREEN_WIDTH*0.5, SCREEN_HEIGHT*0.3, 'midtop', TILE_SIZE)
+
+        death_image = pygame.image.load(f'platformer/data/images/menu/player/death/0.png').convert_alpha()
+        death_image = pygame.transform.smoothscale(death_image, (4*TILE_SIZE, 2*TILE_SIZE))
+        cat_rect = death_image.get_rect()
+        cat_rect.x = SCREEN_WIDTH* 0.55
+        cat_rect.bottom = SCREEN_HEIGHT*0.525
+        canvas.blit(death_image, cat_rect)
+        draw_text('Game over', 200, WHITE, canvas, SCREEN_WIDTH*0.5, SCREEN_HEIGHT*0.5, 'midtop', TILE_SIZE)
         
         clickable = True
         screen.blit(canvas, (0, 0))
@@ -3030,13 +3029,18 @@ def main_menu():
     pygame.mixer.music.load(f'platformer/data/sounds/music/main_menu_music.mp3')
     pygame.mixer.music.play(-1, 0.0, 2500)
     texts = ['Start', 'Settings', 'Credits', 'Quit']
-    x = 0
     number_of_buttons = 4
     buttons = []
+    icons = [interface_images['play'], interface_images['settings'], interface_images['profile'], interface_images['cancel']]
+    icons = transform_images(icons, int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH*0.8, SCREEN_HEIGHT//10 +
-                        x*TILE_SIZE*2, texts[x], texts[x], button_clicked, x)
+                        x*TILE_SIZE*2, texts[x], texts[x], button_long, x)
+        button.rect.right = SCREEN_WIDTH*0.9
         buttons.append(button)
+        icon_button = Button(button.rect.x, button.rect.centery, 'icon', '', icons[x], x)
+        buttons.append(icon_button)
+        
     running = True
     clickable = False
     player = Entity(0, SCREEN_WIDTH * 0.5, SCREEN_HEIGHT*0.7, 0)
@@ -3044,19 +3048,17 @@ def main_menu():
     player.animation_list = load_images('menu/player/jump')
     friend.animation_list = load_images('menu/friend/jump')
 
-    menu_icons = transform_images([start_icon, settings_icon, credits_icon, quit_icon], int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
-
     player.animation_list = transform_images(player.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
     friend.animation_list = transform_images(friend.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
     # friend.flip = True
     anim_frame = 0
     last_update = 0
     current_time = 0
+    helper = 0,0
     while running:
         time_per_frame = Clock.tick(FPS)
         tick = time_per_frame / 1000.0
         current_time += time_per_frame
-        canvas.fill(BLACK)
         canvas.blit(menu_background_image, (0,0))
         if new_resolution:
             player.animation_list = transform_images(player.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
@@ -3064,13 +3066,20 @@ def main_menu():
             player.rect.topleft = SCREEN_WIDTH * 0.5, SCREEN_HEIGHT*0.7
             friend.rect.topleft = SCREEN_WIDTH * 0.6, SCREEN_HEIGHT*0.75
             for button in buttons:
-                button.image = pygame.transform.smoothscale(button.image, (4*TILE_SIZE, TILE_SIZE))
-                button.rect.right = SCREEN_WIDTH*0.9
-                button.rect.y = SCREEN_HEIGHT//10+ TILE_SIZE*2*button.button_id
-            menu_icons = transform_images([start_icon, settings_icon, credits_icon, quit_icon], int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
+                if button.type != 'icon':
+                    button.image = pygame.transform.smoothscale(button.image, (4*TILE_SIZE, TILE_SIZE))
+                    button.rect = button.image.get_rect()
+                    button.rect.right = SCREEN_WIDTH*0.9
+                    button.rect.y = SCREEN_HEIGHT//10 + TILE_SIZE*2*button.button_id
+                    helper = button.rect.x, button.rect.centery
+                else:
+                    button.image = pygame.transform.smoothscale(button.image, (int(1.5*TILE_SIZE), int(1.5*TILE_SIZE)))
+                    button.rect = button.image.get_rect()
+                    button.rect.centerx = helper[0]
+                    button.rect.centery = helper[1]
+                
             new_resolution = False
 
-        print(player.image)
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -3080,7 +3089,7 @@ def main_menu():
                     pygame.quit()
                     sys.exit()
 
-        if current_time - last_update > 120:
+        if current_time - last_update > 200:
             if anim_frame < 5:
                 anim_frame += 1
                 last_update = current_time
@@ -3097,9 +3106,13 @@ def main_menu():
         for button in buttons:
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
+                    sfx_dic['click'].play()
                     if button.button_id == 0:
                         clickable = False
                         game()
+                        pygame.mixer.stop()
+                        pygame.mixer.music.load(f'platformer/data/sounds/music/main_menu_music.mp3')
+                        pygame.mixer.music.play(-1, 0.0, 2500)
                     elif button.button_id == 1:
                         clickable = False
                         settings()
@@ -3110,30 +3123,36 @@ def main_menu():
                         pygame.quit()
                         sys.exit()
 
-            canvas.blit(menu_icons[button.button_id], (button.rect.x - TILE_SIZE, button.rect.y - TILE_SIZE/4))
-
-        draw_text('Game', 250, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
-        draw_text('name', 200, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.95, 'left', TILE_SIZE)
+        draw_text('Cat-hletic', 150, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
+        draw_text('journey', 120, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.925, 'left', TILE_SIZE)
         clickable = True
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
 def ingame_menu():
     global menu_background_image
-    x = 0
-    texts = ['Resume', 'Audio', 'Controls', 'Main Menu']
+    global interface_images
+    texts = ['Resume', 'Audio', 'Controls', 'Menu']
     number_of_buttons = 4
+    back_button_image = interface_images['back']
+    back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
+    back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
+    back_button.rect.left = SCREEN_WIDTH*0.05
     buttons = []
+    button_long = interface_images['long']
+    button_long = pygame.transform.smoothscale(button_long, (4*TILE_SIZE, TILE_SIZE))
+    icons = [interface_images['play'], interface_images['music'], interface_images['settings'], interface_images['home']]
+    icons = transform_images(icons, int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
     for x, button in enumerate(range(number_of_buttons)):
         button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, texts[x], texts[x],button_clicked, x)
+                        x*button_long.get_height()*2, texts[x], texts[x],button_long, x)
         buttons.append(button)
-
+        icon_button = Button(button.rect.x, button.rect.centery, texts[x], '', icons[x], x)
+        buttons.append(icon_button)
     clickable = False
     running = True
 
     while running:
-        canvas.fill(BLACK)
         canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -3146,19 +3165,22 @@ def ingame_menu():
         for button in buttons:
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
+                    sfx_dic['click'].play()
                     if button.button_id == 0:
                         running = False
-                        print('clikc')
                         return 1
                     elif button.button_id == 1:
                         audio()
                     elif button.button_id == 2:
                         controls()
                     elif button.button_id == 3:
-                        print('clikc')
                         return 0
                     clickable = False
-
+        if back_button.draw(canvas, TILE_SIZE):
+            if clickable:
+                sfx_dic['back'].play()
+                running = False
+                return 1
         clickable = True
         
         screen.blit(canvas, (0, 0))
@@ -3167,9 +3189,21 @@ def ingame_menu():
 #credits section
 def show_credits():
     global menu_background_image
+    global interface_images
     running = True
+    plate = pygame.Surface((SCREEN_WIDTH*0.4, SCREEN_HEIGHT*0.6))
+    plate.set_alpha(100)
+    plate_rect = plate.get_rect()
+    plate_rect.topleft = (SCREEN_WIDTH*0.5, SCREEN_HEIGHT*0.2)
+    back_button_image = interface_images['back']
+    back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
+    back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
+    back_button.rect.left = SCREEN_WIDTH*0.05
+    credits = {
+
+    }
+    clickable = False
     while running:
-        canvas.fill(BLACK)
         canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -3178,26 +3212,69 @@ def show_credits():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
+
+        if back_button.draw(canvas, TILE_SIZE):
+            if clickable:
+                sfx_dic['click'].play()
+                running = False
+        clickable = True
+        pygame.draw.rect(canvas, (0,255,127), plate_rect,  1, 1)
+        canvas.blit(plate, (plate_rect.x, plate_rect.y))
+
+        for index, i in enumerate(credits):
+            draw_text(credits[i], 35, WHITE, canvas, plate_rect.centerx + TILE_SIZE*2, TILE_SIZE//2 + plate_rect.y + index*((plate_rect.bottom - plate_rect.y)//len(credits)), 'midtop', TILE_SIZE)
+            draw_text(i, 45, WHITE, canvas, plate_rect.centerx - TILE_SIZE*2, TILE_SIZE//2 + plate_rect.y + index*((plate_rect.bottom - plate_rect.y)//len(credits)), 'midtop', TILE_SIZE)
+
         draw_text('Credits', 150, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
+
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
 #settings
 def settings():
     global menu_background_image
+    global new_resolution
+    global interface_images
+    back_button_image = interface_images['back']
+    back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
+    back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
+    back_button.rect.left = SCREEN_WIDTH*0.05
     number_of_buttons = 3
     buttons = []
     texts = ['Audio', 'Resolution', 'Controls']
+    button_long = interface_images['long']
+    button_long = pygame.transform.smoothscale(button_long, (4*TILE_SIZE, TILE_SIZE))
+    icons = [interface_images['music'], interface_images['plus'], interface_images['settings']]
+    icons = transform_images(icons, int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
     for x, button in enumerate(range(number_of_buttons)):
-        button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, texts[x],texts[x], button_clicked, x)
+        button = Button(SCREEN_WIDTH*0.8, SCREEN_HEIGHT//10 +
+                        x*TILE_SIZE*2, texts[x], texts[x], button_long, x)
+        button.rect.right = SCREEN_WIDTH*0.9
         buttons.append(button)
-    
+        icon_button = Button(button.rect.x - 3, button.rect.centery, 'icon', '', icons[x], x)
+        buttons.append(icon_button)
+    helper = 0,0
     running = True
     clickable = False
     while running:
-        canvas.fill(BLACK)
         canvas.blit(menu_background_image, (0,0))
+        if new_resolution:
+            back_button.image = pygame.transform.smoothscale(back_button.image,(TILE_SIZE,TILE_SIZE))
+            back_button.rect = back_button.image.get_rect()
+            back_button.rect.left = SCREEN_WIDTH*0.05
+            back_button.rect.centery = SCREEN_HEIGHT*0.915
+            for button in buttons:
+                if button.type != 'icon':
+                    button.image = pygame.transform.smoothscale(button.image, (4*TILE_SIZE, TILE_SIZE))
+                    button.rect = button.image.get_rect()
+                    button.rect.right = SCREEN_WIDTH*0.9
+                    button.rect.y = SCREEN_HEIGHT//10+ TILE_SIZE*2*button.button_id
+                    helper = button.rect.x, button.rect.centery
+                else:
+                    button.image = pygame.transform.smoothscale(button.image, (int(1.5*TILE_SIZE), int(1.5*TILE_SIZE)))
+                    button.rect = button.image.get_rect()
+                    button.rect.centerx = helper[0]
+                    button.rect.centery = helper[1]
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -3206,15 +3283,20 @@ def settings():
                 if event.key == K_ESCAPE:
                     running = False
         for button in buttons:
-            button.rect.centerx = SCREEN_WIDTH//2
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
+                    sfx_dic['click'].play()
                     if button.button_id == 0:
                         audio()
                     elif button.button_id == 1:
-                       resolutions()
+                        resolutions()
                     elif button.button_id == 2:
                         controls()
+                clickable = False
+        if back_button.draw(canvas, TILE_SIZE):
+            if clickable:
+                sfx_dic['back'].play()
+                running = False
         clickable = True
         draw_text('Settings', 150, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
@@ -3223,9 +3305,29 @@ def settings():
 #show controls
 def controls():
     global menu_background_image
+    global interface_images
+    texts= { 
+            'jump' : 'W / Spacebar', 
+            'move left': 'A',
+            'move_right': 'D',
+            'Use lever': 'E',
+            'In-game menu': 'Escape',
+            'Go back in menu': 'Escape',
+            'skip cutscenes': 'Enter'
+            }
+    back_button_image = interface_images['back']
+    back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
+    back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
+    back_button.rect.left = SCREEN_WIDTH*0.05
+    print(len(texts))
+    plate = pygame.Surface((SCREEN_WIDTH*0.45, SCREEN_HEIGHT*(0.1*len(texts))))
+    plate.set_alpha(100)
+    plate_rect = plate.get_rect()
+    plate_rect.topleft = (SCREEN_WIDTH*0.5, SCREEN_HEIGHT*0.2)
     running = True
+    clickable = False
+    
     while running:
-        canvas.fill(BLACK)
         canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -3234,6 +3336,17 @@ def controls():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
+
+        if back_button.draw(canvas, TILE_SIZE):
+            if clickable:
+                sfx_dic['back'].play()
+                running = False
+        clickable = True
+        pygame.draw.rect(canvas, GREEN, plate_rect,  1, 1)
+        canvas.blit(plate, (plate_rect.x, plate_rect.y))
+        for index, i in enumerate(texts):
+            draw_text(texts[i], 40, WHITE, canvas, plate_rect.centerx + TILE_SIZE*2, TILE_SIZE//2 + plate_rect.y + index*((plate_rect.bottom - plate_rect.y)//len(texts)), 'midtop', TILE_SIZE)
+            draw_text(i, 45, WHITE, canvas, plate_rect.centerx - TILE_SIZE*2, TILE_SIZE//2 + plate_rect.y + index*((plate_rect.bottom - plate_rect.y)//len(texts)), 'midtop', TILE_SIZE)
         draw_text('Controls', 100, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
@@ -3241,15 +3354,36 @@ def controls():
 #show controls
 def audio():
     global menu_background_image
+    global interface_images
+    toggle_off = interface_images['toggle_off']
+    toggle_on = interface_images['toggle_on']
+    sound_icon_on = interface_images['sound_on']
+    sound_icon_off = interface_images['sound_off']
+    music_icon = interface_images['music_one']
+    sound_icon_on = pygame.transform.smoothscale(sound_icon_on, (TILE_SIZE//2, TILE_SIZE//2))
+    sound_icon_off = pygame.transform.smoothscale(sound_icon_off, (TILE_SIZE//2, TILE_SIZE//2))
+    music_icon = pygame.transform.smoothscale(music_icon, (TILE_SIZE//2, TILE_SIZE//2))
+    toggle_off = pygame.transform.smoothscale(toggle_off, (TILE_SIZE*2, TILE_SIZE))
+    toggle_on = pygame.transform.smoothscale(toggle_on, (TILE_SIZE*2, TILE_SIZE))
+    back_button_image = interface_images['back']
+    back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
+    back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
+    back_button.rect.left = SCREEN_WIDTH*0.05
     number_of_buttons = 3
     buttons = []
     grey_rect_surface = pygame.Surface((4*TILE_SIZE,TILE_SIZE))
     grey_rect_surface.fill(DARKGRAY)
     actual_volume_rect = grey_rect_surface.get_rect()
-    
     texts = ['Master volume', 'Music volume', 'Sound effects']
     types = ['sound_bar', 'toggle', 'toggle']
-    images = [grey_rect_surface, toggle_on, toggle_on]
+    if music_handler.sounds_off and music_handler.paused:
+        images = [grey_rect_surface, toggle_off, toggle_off]
+    elif not music_handler.sounds_off and music_handler.paused:
+        images = [grey_rect_surface, toggle_off, toggle_on]
+    elif music_handler.sounds_off and not music_handler.paused:
+        images = [grey_rect_surface, toggle_on, toggle_off]
+    else:
+        images = [grey_rect_surface, toggle_on, toggle_on]
     for x, button in enumerate(range(number_of_buttons)):
         if types[x] == 'toggle':
             button = Button(SCREEN_WIDTH*0.75 + images[x].get_width(), SCREEN_HEIGHT*0.1 + \
@@ -3258,12 +3392,16 @@ def audio():
             button = Button(SCREEN_WIDTH*0.85, SCREEN_HEIGHT*0.1 + x*images[x].get_height()*2, types[x], '', images[x], x)
         buttons.append(button)
 
+    plate = pygame.Surface((SCREEN_WIDTH*0.5, buttons[-1].rect.bottom - buttons[0].rect.top + TILE_SIZE))
+    plate.set_alpha(100)
+    plate_rect = plate.get_rect()
+    plate_rect.topleft = (int(SCREEN_WIDTH*0.475), buttons[0].rect.top - TILE_SIZE//2)
+
     actual_volume_rect.center = buttons[0].rect.center
     actual_volume_rect.width = music_handler.master_volume*actual_volume_rect.width
     clickable = False
     running = True
     while running:
-        canvas.fill(BLACK)
         canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -3284,8 +3422,10 @@ def audio():
                 elif click_difference_master_volume_right < TILE_SIZE//5 and click_difference_master_volume_right > 0:
                     music_handler.set_master_volume(sfx_dic, 1.0)
                     actual_volume_rect.width = buttons[0].rect.width
+        pygame.draw.rect(canvas, (0,255,127), plate_rect,  1, 1)
+        canvas.blit(plate, (plate_rect.x, plate_rect.y))
         for button in buttons:
-            draw_text(texts[button.button_id], 50, RED,
+            draw_text(texts[button.button_id], 50, WHITE,
                                       canvas, SCREEN_WIDTH*0.5, button.rect.centery, 'left',  TILE_SIZE)
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
@@ -3295,20 +3435,34 @@ def audio():
                         calculate_click_pos = abs(mouse_pos[0] - button.rect.x)
                         actual_volume_rect.width = calculate_click_pos
                         music_handler.set_master_volume(sfx_dic,float(actual_volume_rect.width/button.rect.width))
+                        sfx_dic['rollover2'].play()
                     elif button.button_id == 1:
                         music_handler.toggle_music()
                         if music_handler.paused:
                             button.image = toggle_off
                         else:
                             button.image = toggle_on
+                        sfx_dic['toggle'].play()
                     elif button.button_id == 2:
                         music_handler.toggle_sounds(sfx_dic)
                         if music_handler.sounds_off:
                             button.image = toggle_off
                         else:
                             button.image = toggle_on
+                        sfx_dic['toggle'].play()
+            if back_button.draw(canvas, TILE_SIZE):
+                if clickable:
+                    sfx_dic['back'].play()
+                    running = False
+            if music_handler.paused:
+                canvas.blit(music_icon, (buttons[1].rect.right - buttons[1].rect.width*0.4, buttons[1].rect.y + music_icon.get_height()//2))
+            else:
+                canvas.blit(music_icon, (buttons[1].rect.x + music_icon.get_width()//2, buttons[1].rect.y + music_icon.get_height()//2))
             
-            
+            if music_handler.sounds_off:
+                canvas.blit(sound_icon_off, (buttons[2].rect.right - buttons[2].rect.width*0.4, buttons[2].rect.y + sound_icon_off.get_height()//2))
+            else:
+                canvas.blit(sound_icon_on, (buttons[2].rect.x + sound_icon_on.get_width()//2, buttons[2].rect.y + sound_icon_on.get_height()//2))
             pygame.draw.rect(canvas, GREEN,
                         (buttons[0].rect.x, buttons[0].rect.y, actual_volume_rect.width, actual_volume_rect.height))
         clickable = True
@@ -3330,17 +3484,24 @@ def resolutions():
     global img_list
     global menu_background_image
     global new_resolution
+    global interface_images
+    back_button_image = interface_images['back']
+    back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
+    back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
+    back_button.rect.left = SCREEN_WIDTH*0.05
     running = True
     number_of_buttons = 3
     buttons = []
     texts = ['800x640','1024x768','Fullscreen']
+    button_long = interface_images['long']
+    button_long = pygame.transform.smoothscale(button_long, (4*TILE_SIZE, TILE_SIZE))
     for x, button in enumerate(range(number_of_buttons)):
-        button = Button(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 +
-                        x*button_clicked.get_height()*2, texts[x], texts[x], button_clicked, x)
+        button = Button(SCREEN_WIDTH*0.8, SCREEN_HEIGHT//10 +
+                        x*TILE_SIZE*2, texts[x], texts[x], button_long, x)
+        button.rect.right = SCREEN_WIDTH*0.9
         buttons.append(button)
     clickable = False
     while running:
-        canvas.fill(BLACK)
         canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -3349,11 +3510,21 @@ def resolutions():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-        
+        if new_resolution:
+            back_button.image = pygame.transform.smoothscale(back_button.image,(TILE_SIZE,TILE_SIZE))
+            back_button.rect = back_button.image.get_rect()
+            back_button.rect.left = SCREEN_WIDTH*0.05
+            back_button.rect.centery = SCREEN_HEIGHT*0.915
+
+            for button in buttons:
+                button.image = pygame.transform.smoothscale(button.image, (4*TILE_SIZE, TILE_SIZE))
+                button.rect = button.image.get_rect()
+                button.rect.right = SCREEN_WIDTH*0.9
+                button.rect.y = SCREEN_HEIGHT//10+ TILE_SIZE*2*button.button_id
         for x,button in enumerate(buttons):
-            button.rect.centerx = SCREEN_WIDTH//2
             if button.draw(canvas, TILE_SIZE):
                 if clickable:
+                    sfx_dic['click'].play()
                     if button.button_id == 0:
                         SCREEN_WIDTH, SCREEN_HEIGHT = 800, 640
                         screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -3390,10 +3561,16 @@ def resolutions():
                             img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                         img_list.append(img)
                     new_resolution = True
+        if back_button.draw(canvas, TILE_SIZE):
+            if clickable:
+                sfx_dic['back'].play()
+                running = False
         clickable = True
         draw_text('Resolution', 100, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
 #start game
+
 main_menu()
+# cProfile.run('game()')

@@ -125,7 +125,7 @@ def move_with_collisions(entity, movement, tiles, platforms, sprites, invisible_
         for sprite in hit_list:
             if sprite.in_death_animation == False and sprite.alive and not entity.reset_invulnerability:
                 if abs((entity.rect.bottom) - sprite.rect.top) <= entity.collision_treshold:
-                    if sprite.entity_id == 2:
+                    if sprite.entity_id == 2 and not entity.invulnerability:
                         entity.hurt(False, 'player')
                     else:
                         if sprite.entity_id == 8:

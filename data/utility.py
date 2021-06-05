@@ -4,6 +4,7 @@ import pygame
 from pygame import mixer
 pygame.mixer.init(48000, -16, 1, 1024)
 mixer.init()
+pygame.font.init()
 #loads fake platforms
 def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, platform_image):
     for x in range(width):
@@ -14,12 +15,19 @@ def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, pl
                 surface.blit(ground_image, (y*TILE_SIZE, x*TILE_SIZE))
     return surface
 
+def load_fonts_to_dic():
+    dict = {}
+    for i in range(500):
+        font = pygame.font.Font('platformer/data/font/caramel_sweets.ttf', i)
+        dict[i] = font
+    return dict
+
 #main function for drawing texts
 def draw_text(text, size, color, surface, x, y, draw_position, TILE_SIZE):
     if text:
         text = text.upper()
-        size = (TILE_SIZE / 100) * size
-        font = pygame.font.Font('platformer/data/font/caramel_sweets.ttf', round(size))
+        size = round((TILE_SIZE / 100) * size)
+        font = fonts[size]
         textobj = font.render(text, 1, color)
         textrect = textobj.get_rect()
         if draw_position == 'midtop':
@@ -105,3 +113,5 @@ def simple_collision_check(sprite, entities):
                 collision = True
 
         return collision
+
+fonts = load_fonts_to_dic()

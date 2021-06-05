@@ -24,11 +24,11 @@ pygame.mixer.music.set_volume(0.5)
 music_handler = SoundHandler()
 Clock = pygame.time.Clock()
 FPS = 60
-monitor_size = [pygame.display.Info().current_w,pygame.display.Info().current_h]
-SCREEN_WIDTH = monitor_size[0]
-SCREEN_HEIGHT = monitor_size[1]
-flags = FULLSCREEN | DOUBLEBUF
 
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = int(SCREEN_WIDTH*0.8)
+flags = pygame.FULLSCREEN | pygame.DOUBLEBUF
+is_fullscreen = False
 # define game variables
 GRAVITY = round(SCREEN_HEIGHT / 12)
 GRAVITY_FORCE_LIMIT = round(SCREEN_HEIGHT / 50)
@@ -52,7 +52,6 @@ YELLOW = (255, 255, 0)
 DARKGRAY = (40, 40, 40)
 
 class Animation_type(IntEnum):
-
     Death = 0,
     Fall = 1,
     Idle = 2,
@@ -65,8 +64,9 @@ class Animation_type(IntEnum):
     Disappear = 9,
     Extra = 10
 
-# screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-screen = pygame.display.set_mode(monitor_size, flags)
+
+monitor_size = [pygame.display.Info().current_w,pygame.display.Info().current_h]
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
 #cursor
@@ -87,11 +87,11 @@ blue_fish_image = pygame.image.load(
 dead_fish = load_images('entities/Dead_fish')
 background_images = load_images('backgrounds/d')
 interface_images = load_images_to_dic('interface')
+arrow_image = interface_images['arrow']
+button_long = interface_images['long']
 
 cloud_image = pygame.image.load(
     f'platformer/data/images/entities/Cloud/cloud.png').convert_alpha()
-arrow_image = interface_images['arrow']
-button_long = interface_images['long']
 
 button_long = pygame.transform.smoothscale(button_long, (4*TILE_SIZE, TILE_SIZE))
 
@@ -105,9 +105,11 @@ fake_platform_green = pygame.image.load(
 fake_ground_green = pygame.image.load(
     f'platformer/data/images/tiles/66.png').convert_alpha()
 
+fullscreen_background = pygame.image.load(
+    f'platformer/data/images/backgrounds/fullscreen_background/bg.png').convert_alpha()
+
 health_image = pygame.image.load(
     f'platformer/data/images/other/health.png').convert_alpha()
-
 menu_background_image = pygame.image.load(
     f'platformer/data/images/menu/menu_background/1.png').convert_alpha()
 menu_background_image = pygame.transform.smoothscale(menu_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -209,6 +211,7 @@ class Tutorial:
         self.current_time = time_passed
         pressed = pygame.key.get_pressed()
         self.player.set_action(int(Animation_type.Idle))
+        self.skip = False
         if self.skip == 0:
             self.skip = pressed[pygame.K_RETURN]
         if self.skip and self.current_time - self.started_time > 1000:
@@ -605,6 +608,7 @@ class FinalCutScene:
             sfx_dic['skip'].play()
             self.new_step = True
             self.step = 5
+            self.dialogue_in_progress = False
 
         self.last_text_counter = self.text_counter
         if self.step == 0:
@@ -876,20 +880,28 @@ class CutSceneManager:
                              (0, SCREEN_HEIGHT-self.window_size, self.canvas.get_width(), self.window_size))
             
             if self.window_size >= self.canvas_height*0.2:
-                draw_text('Enter to skip', 40, WHITE, canvas, self.skip_button.rect.right, self.skip_button.rect.bottom, 'topright', TILE_SIZE)
-                if self.skip_button.draw(canvas, TILE_SIZE):
-                    self.cut_scene.skip = 1
-                if self.cut_scene.dialogue_in_progress:
-                    canvas.blit(self.cut_scene.image, (SCREEN_WIDTH/10, self.canvas_height - self.canvas_height*0.01 - self.cut_scene.image.get_height()))
+                if self.cut_scene.name != 'final scene' or (self.cut_scene.name == 'final scene' and self.cut_scene.step < 5):
+                    draw_text('Enter to skip', 40, WHITE, canvas, self.skip_button.rect.right, self.skip_button.rect.bottom, 'topright', TILE_SIZE)
+                    if self.skip_button.draw(canvas, TILE_SIZE):
+                        self.cut_scene.skip = 1
+                    if self.cut_scene.dialogue_in_progress:
+                        canvas.blit(self.cut_scene.image, (SCREEN_WIDTH/10, self.canvas_height - self.canvas_height*0.01 - self.cut_scene.image.get_height()))
             # Draw specific cut scene details
             self.cut_scene.draw(self.canvas)
 
 
-def draw_background(canvas, offset_x, offset_y, background_images):
-    parallax_variable = 0.1
-    for image in background_images:
-        canvas.blit(image, ((0 - round(offset_x * parallax_variable)), 0 - offset_y*parallax_variable))
-        parallax_variable += 0.05
+def draw_background(canvas, offset_x, offset_y, background_images, fullscreen, screen_rect):
+    if fullscreen:
+        canvas.blit(fullscreen_background, (0, 0))
+    else:
+        for x in range(3):
+            parallax_variable = 0.05
+            for image in background_images:
+                if parallax_variable > 0.20:
+                    parallax_variable = 0.2
+                canvas.blit(image, (x*SCREEN_WIDTH - round(offset_x*parallax_variable), 0))
+                    # pygame.draw.rect(canvas, RED, (bg_rect.x - round(offset_x*parallax_variable), 0, bg_rect.width, bg_rect.height), 10)
+                parallax_variable += 0.05
 
 
 # load all images & animations
@@ -1089,12 +1101,10 @@ class World():
                             platform[0].rect.x, platform[0].rect.y, platform, new_surface, platform_id, level))
                         platform_id += 1
                         platform = []
-                        print(f'platform_id PLOSINA: {platform_id}')
                     elif tile == 74:
                         self.platforms.append(Platform(
                             x*TILE_SIZE, y*TILE_SIZE, 1, img, platform_id, level))
                         platform_id += 1
-                        print(f'platform_id SINGLE: {platform_id}')
                     elif tile in (41,61,63,64,86,87,75,76,77,120,165):
                         new_decoration = Decoration(img, x * TILE_SIZE, y*TILE_SIZE, 'flower')
                         decoration_group.add(new_decoration)
@@ -1206,9 +1216,9 @@ class World():
         return player, camera, self.platforms, self.invisible_blocks_list
 
     #draw all tiles
-    def draw(self, canvas, offset_x, offset_y, player):
+    def draw(self, canvas, offset_x, offset_y, player, screen_rect):
         for tile in self.obstacles_list:
-            if abs(tile[1].x - player.rect.x) < SCREEN_WIDTH + SCREEN_WIDTH//10:
+            if tile[1].colliderect(screen_rect):
                 canvas.blit(tile[0], (round(tile[1].x - offset_x),
                                     round(tile[1].y - offset_y), tile[1].width, tile[1].height))
 
@@ -1233,8 +1243,9 @@ class Entity(pygame.sprite.Sprite):
 
         self.vel_y = 0
         self.jump = False
-        self.jump_force = round(SCREEN_HEIGHT/35)
-        self.jump_vel = SCREEN_HEIGHT*3
+        self.jump_force = round(TILE_SIZE/2.35)
+        self.jump_vel = TILE_SIZE*41
+        
         self.in_air = True
         self.flip = False
 
@@ -1247,7 +1258,7 @@ class Entity(pygame.sprite.Sprite):
         self.local_time = 0
         self.air_timer = 0
 
-        self.fish = 0
+        self.fish = 33
         self.checkpoint_position = vec(0, 0)
 
         self.invulnerability = False
@@ -1265,9 +1276,9 @@ class Entity(pygame.sprite.Sprite):
         self.collision_treshold = 25
 
         if self.entity_id == 0:
-            self.health_points = 1
+            self.health_points = 9
         elif self.entity_id == 3:
-            self.health_points = 2
+            self.health_points = 6
             self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
         elif self.entity_id != 0:
             self.health_points = 1
@@ -1286,9 +1297,8 @@ class Entity(pygame.sprite.Sprite):
         self.on_platform = False
         self.was_on_platform = False
 
-    def update(self, current_time, tick, world, all_platforms, level):
+    def update(self, current_time, tick, world, all_platforms, level, screen_rect):
         self.local_time = current_time
-        
         #control the effects of items
         if self.entity_id == 0:
             if self.invulnerability and self.local_time - self.invulnerability_start_time > effect_durations['Bubble']:
@@ -1298,54 +1308,56 @@ class Entity(pygame.sprite.Sprite):
                 self.boosted = False
         #if outside of bounds, gets hurt
         if self.rect.x > world.get_world_length() or self.rect.x + self.rect.width < 0 or \
-                        self.rect.y + self.rect.height < 0 or self.rect.y > SCREEN_HEIGHT:
+                        self.rect.y + self.rect.height < 0 or self.rect.y > SCREEN_HEIGHT and self.entity_id != 3:
             self.hurt(True, 'out of bounds')
+            
+        print(self.entity_id, self.rect.x, self.alive, self.vel_y)
+        if self.rect.colliderect(screen_rect) or self.entity_id == 3:
+            # invulnerability when respawning
+            if self.in_death_animation == False:
+                if self.entity_id == 0:
+                    if self.reset_invulnerability:
+                        if self.local_time - self.reset_invulnerability_time > 2000:
+                            self.reset_invulnerability = False
 
-        # invulnerability when respawning
-        if self.in_death_animation == False:
-            if self.entity_id == 0:
-                if self.reset_invulnerability:
-                    if self.local_time - self.reset_invulnerability_time > 2000:
-                        self.reset_invulnerability = False
+                    self.move(self.moving_left, self.moving_right, world, all_platforms,tick,level)
+                    self.flip = True if self.direction < 0 else False
 
-                self.move(self.moving_left, self.moving_right, world, all_platforms,tick,level)
-                self.flip = True if self.direction < 0 else False
-
-            #entity behavior based on id and level
-            elif self.entity_id == 1 or self.entity_id == 2:
-                self.set_action(int(Animation_type.Walk))
-                self.determine_movement()
-                self.move(self.moving_left, self.moving_right, world, all_platforms,tick, level)
-            elif self.entity_id == 3:
-                if level == 8:
-                    if self.rect.y + self.rect.height + 2*TILE_SIZE > SCREEN_HEIGHT:
-                        self.rect.y = SCREEN_HEIGHT - self.rect.height - 2*TILE_SIZE
-                        self.direction *= -1
-                    elif self.rect.y < 0:
-                        self.rect.y = 0
-                        self.direction *= -1
-                elif level == 9:
-                    if not self.diving:
-                        self.rect.x += self.speed * self.direction * tick # wingman
-                        if self.rect.x < BORDER_LEFT:
-                            self.rect.x = BORDER_LEFT
+                #entity behavior based on id and level
+                elif self.entity_id == 1 or self.entity_id == 2:
+                    self.set_action(int(Animation_type.Walk))
+                    self.determine_movement()
+                    self.move(self.moving_left, self.moving_right, world, all_platforms,tick, level)
+                elif self.entity_id == 3:
+                    if level == 8:
+                        if self.rect.y + self.rect.height + 2*TILE_SIZE > SCREEN_HEIGHT:
+                            self.rect.y = SCREEN_HEIGHT - self.rect.height - 2*TILE_SIZE
                             self.direction *= -1
-                        elif self.rect.x + self.rect.width > BORDER_RIGHT:
-                            self.rect.x = BORDER_RIGHT - self.rect.width
+                        elif self.rect.y < 0:
+                            self.rect.y = 0
                             self.direction *= -1
-                    # self.rect.y += self.speed * self.direction * tick
-                    self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
-            elif self.entity_id == 6: #friend code
-                self.move(self.moving_left, self.moving_right, world, all_platforms,tick, level)
+                    elif level == 9:
+                        if not self.diving:
+                            self.rect.x += self.speed * self.direction * tick # wingman
+                            if self.rect.x < BORDER_LEFT:
+                                self.rect.x = BORDER_LEFT
+                                self.direction *= -1
+                            elif self.rect.x + self.rect.width > BORDER_RIGHT:
+                                self.rect.x = BORDER_RIGHT - self.rect.width
+                                self.direction *= -1
+                        # self.rect.y += self.speed * self.direction * tick
+                        self.hitbox = pygame.Rect(self.rect.x + self.rect.width/4, self.rect.y, self.rect.width/2, self.rect.height)
+                elif self.entity_id == 6: #friend code
+                    self.move(self.moving_left, self.moving_right, world, all_platforms,tick, level)
 
-            if self.air_timer > 0 and self.was_on_platform:
-                self.vel_y = 1
-        else:
-            if not self.entity_id in (2, 8):
-                self.set_action(int(Animation_type.Death))
+                if self.air_timer > 0 and self.was_on_platform:
+                    self.vel_y = 1
+            else:
+                if not self.entity_id in (2, 8):
+                    self.set_action(int(Animation_type.Death))
 
-        
-        self.update_animation()
+            
+            self.update_animation()
 
     def move(self, moving_left, moving_right, world, all_platforms,tick, level):
         dx = 0
@@ -1484,7 +1496,7 @@ class Entity(pygame.sprite.Sprite):
             self.image = self.animation_list[self.action][self.frame_index]
             self.rect = self.image.get_rect()
             self.states = {'shoot': 'shoot', 'dive': 'dive', 'hide':'hide', 'drop':'drop'}
-            self.cooldowns = {'shoot': 3000, 'drop': 10000, 'global': 1000}
+            self.cooldowns = {'shoot': 3000, 'drop': 8000, 'global': 1000}
             self.shoot_timer = self.drop_timer = self.global_timer = -100000
             self.stunned = False
             self.stun_timer = 0
@@ -1650,28 +1662,29 @@ class Entity(pygame.sprite.Sprite):
                 break
     
     #draw entities
-    def draw(self, canvas, offset_x, offset_y):
-        if self.entity_id == 0 or self.entity_id == 6:
-            #change alpha while invulnerable after reset
-            if self.reset_invulnerability and self.entity_id == 0:
-                self.image.set_alpha(100)
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.entity_id == 0 or self.entity_id == 6:
+                #change alpha while invulnerable after reset
+                if self.reset_invulnerability and self.entity_id == 0:
+                    self.image.set_alpha(100)
+                else:
+                    self.image.set_alpha(255)
+                    
+                canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                                    offset_x - TILE_SIZE//2), 2 + round(self.rect.y -
+                                                                                                        offset_y - TILE_SIZE//4)))                                                                             
             else:
-                self.image.set_alpha(255)
-                
-            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
-                                                                                offset_x - TILE_SIZE//2), round(self.rect.y -
-                                                                                                    offset_y - TILE_SIZE//4)))                                                                             
-        else:
-            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
-                                                                                offset_x), round(self.rect.y - offset_y)))  
-        # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
-        #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                                                                                                      
-        # bubble rect on player                                                                                
-        if self.entity_id == 0:
-            bubble_rect = bubble_image.get_rect()
-            bubble_rect.center = self.rect.center
-            if self.invulnerability:
-                canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
+                canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                                    offset_x), round(self.rect.y - offset_y)))  
+            # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
+            #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                                                                                                      
+            # bubble rect on player                                                                                
+            if self.entity_id == 0:
+                bubble_rect = bubble_image.get_rect()
+                bubble_rect.center = self.rect.center
+                if self.invulnerability:
+                    canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
 
     #draw amount of fish player collected
     def draw_fish(self, canvas):
@@ -1680,9 +1693,9 @@ class Entity(pygame.sprite.Sprite):
 
     #draw health of player
     def draw_health(self, canvas):
-        for x in range(self.health_points):
-            canvas.blit(health_image, (TILE_SIZE/4 + x*TILE_SIZE + x*TILE_SIZE//8, SCREEN_HEIGHT - health_image.get_height()))
-
+        canvas.blit(health_image, (TILE_SIZE/4, SCREEN_HEIGHT - health_image.get_height()))
+        draw_text(str(self.health_points), 60, WHITE, canvas, (TILE_SIZE/4 + health_image.get_width()/2), \
+                SCREEN_HEIGHT - health_image.get_height() + health_image.get_height()/2, 'center', TILE_SIZE)
     #updating images and rects
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
@@ -1745,50 +1758,52 @@ class Platform(pygame.sprite.Sprite):
 
         self.move_x, self.move_y, self.direction, self.speed = self.determine_movement_by_id(id, level)
     
-    def update(self, world, tick):
-        dx = 0
-        dy = 0
-        if self.move_x:
-            dx = self.direction * self.speed * tick
-        if self.move_y:
-            dy = self.direction * self.speed * tick
-        dx = round(dx)
-        dy = round(dy)
+    def update(self, world, tick, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            dx = 0
+            dy = 0
+            if self.move_x:
+                dx = self.direction * self.speed * tick
+            if self.move_y:
+                dy = self.direction * self.speed * tick
+            dx = round(dx)
+            dy = round(dy)
 
-        #bounds tiles for platforms
-        for tile in world.bounds_tiles_list:
-            # check collision in the x direction
-            if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.rect.width, self.rect.height):
-                dx *= -1
-                self.direction *= -1
-            elif tile[1].colliderect(self.rect.x, self.rect.y + dy, self.rect.width, self.rect.height):
-                dy *= -1
-                self.direction *= -1
-        for tile in world.obstacles_list:
-            # check collision in the x direction
-            if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.rect.width, self.rect.height):
-                dx *= -1
-                self.direction *= -1
-            elif tile[1].colliderect(self.rect.x, self.rect.y + dy, self.rect.width, self.rect.height):
-                dy *= -1
-                self.direction *= -1
-        
-        self.rect.x += dx
-        self.rect.y += dy
+            #bounds tiles for platforms
+            for tile in world.bounds_tiles_list:
+                # check collision in the x direction
+                if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.rect.width, self.rect.height):
+                    dx *= -1
+                    self.direction *= -1
+                elif tile[1].colliderect(self.rect.x, self.rect.y + dy, self.rect.width, self.rect.height):
+                    dy *= -1
+                    self.direction *= -1
+            for tile in world.obstacles_list:
+                # check collision in the x direction
+                if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.rect.width, self.rect.height):
+                    dx *= -1
+                    self.direction *= -1
+                elif tile[1].colliderect(self.rect.x, self.rect.y + dy, self.rect.width, self.rect.height):
+                    dy *= -1
+                    self.direction *= -1
+            
+            self.rect.x += dx
+            self.rect.y += dy
 
-    def draw(self, canvas, offset_x, offset_y):
-        if self.parts == 1:
-            canvas.blit(self.image, (round(self.rect.x -
-                                           offset_x), round(self.rect.y - offset_y)))
-            # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
-            #                                        round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
-        else:
-            for x, part in enumerate(self.parts):
-                self.image.blit(part.image, (x*TILE_SIZE, 0))
-            canvas.blit(self.image, (round(self.rect.x -
-                                           offset_x), round(self.rect.y - offset_y)))
-            # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
-                                                #    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.parts == 1:
+                canvas.blit(self.image, (round(self.rect.x -
+                                            offset_x), round(self.rect.y - offset_y)))
+                # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
+                #                                        round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            else:
+                for x, part in enumerate(self.parts):
+                    self.image.blit(part.image, (x*TILE_SIZE, 0))
+                canvas.blit(self.image, (round(self.rect.x -
+                                            offset_x), round(self.rect.y - offset_y)))
+                # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
+                                                    #    round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
     #from loaded json data, determine behavior
     def determine_movement_by_id(self,id, level):
@@ -1807,21 +1822,24 @@ class Item(pygame.sprite.Sprite):
     
         self.vel_y = 0
 
-    def update(self, target, current_time, tick, world, all_platforms, item_boxes_group):
-        dx = 0
-        dy = 0
-        self.vel_y = apply_gravitation(self.vel_y, GRAVITY, tick, GRAVITY_FORCE_LIMIT)
-        dy += self.vel_y
-        if self.rect.colliderect(target.rect):
-            self.action(target, current_time)
-            self.kill()
+    def update(self, target, current_time, tick, world, all_platforms, item_boxes_group, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            dx = 0
+            dy = 0
+            self.vel_y = apply_gravitation(self.vel_y, GRAVITY, tick, GRAVITY_FORCE_LIMIT)
+            dy += self.vel_y
+            if self.rect.colliderect(target.rect):
+                sfx_dic['collect'].play()
+                self.action(target, current_time)
+                self.kill()
 
-        self.rect, colls = move_with_collisions(
-                self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, sfx_dic,tick)
+            self.rect, colls = move_with_collisions(
+                    self,[dx, dy], world.obstacles_list, all_platforms, enemies_group, world.invisible_blocks_list, item_boxes_group, sfx_dic,tick)
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                    offset_x), round(self.rect.y - offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
 
     #action for item
     def action(self, target, current_time):
@@ -1845,9 +1863,10 @@ class Decoration(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
 
 #Water
 class Water(pygame.sprite.Sprite):
@@ -1858,17 +1877,19 @@ class Water(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x - offset_x),
-                                 round(self.rect.y-offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x - offset_x),
+                                    round(self.rect.y-offset_y)))
 
-    def collide_water(self, target, level):
-        if pygame.sprite.collide_rect(self, target):
-            if level != 8:
-                target.hurt(False, 'water')
-            elif level == 8 and target.entity_id == 0:
-                target.hurt(True, 'water')
-                return True
+    def collide_water(self, target, level, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if pygame.sprite.collide_rect(self, target):
+                if level != 8:
+                    target.hurt(False, 'water')
+                elif level == 8 and target.entity_id == 0:
+                    target.hurt(True, 'water')
+                    return True
 #Mystery box   
 class ItemBox(pygame.sprite.Sprite):
     def __init__(self, img, x, y, hits_to_break):
@@ -1882,18 +1903,20 @@ class ItemBox(pygame.sprite.Sprite):
         self.hits_to_break = hits_to_break
         self.new_state = False
 
-    def update(self, img_list):
-        if self.new_state:
-            if self.hits_to_break == 0:
-                self.new_state = False
-                self.destroy = True
-            elif self.hits_to_break == 1:
-                self.image = img_list[215]
-                self.new_state = False
+    def update(self, img_list, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.new_state:
+                if self.hits_to_break == 0:
+                    self.new_state = False
+                    self.destroy = True
+                elif self.hits_to_break == 1:
+                    self.image = img_list[215]
+                    self.new_state = False
                 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x - offset_x),
-                                 round(self.rect.y-offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x - offset_x),
+                                    round(self.rect.y-offset_y)))
 
 #Items you can collect
 class Collectible(pygame.sprite.Sprite):
@@ -1905,11 +1928,12 @@ class Collectible(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
-        # pygame.draw.rect(canvas, RED,
-        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
+            # pygame.draw.rect(canvas, RED,
+            #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
     def collect(self, player):
         if pygame.sprite.collide_rect(self, player):
@@ -1944,13 +1968,14 @@ class FakePlatform(pygame.sprite.Sprite):
 
         self.activated = False
 
-    def update(self, world, tick):
+    def update(self, world, tick, screen_rect):
         if self.activated:
             self.execute_action(tick)
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
         # pygame.draw.rect(canvas, RED,
         #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
@@ -1969,12 +1994,13 @@ class InvisibleBlock(pygame.sprite.Sprite):
 
         self.visible = False
 
-    def draw(self, canvas, offset_x, offset_y):
-        if self.visible:
-            canvas.blit(self.image, (round(self.rect.x -
-                                           offset_x), round(self.rect.y - offset_y)))
-        # pygame.draw.rect(canvas, RED,
-        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.visible:    
+                canvas.blit(self.image, (round(self.rect.x -
+                                            offset_x), round(self.rect.y - offset_y)))
+            # pygame.draw.rect(canvas, RED,
+            #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 #Exit to next level
 class Exit(pygame.sprite.Sprite):
@@ -1985,9 +2011,10 @@ class Exit(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
 
 #Projectiles
 class Projectile(pygame.sprite.Sprite):
@@ -2010,7 +2037,6 @@ class Projectile(pygame.sprite.Sprite):
         self.update_time = 0
     def update(self, current_time, tick):
         self.local_time = current_time
-
         #determine movement
         self.position[0] += (self.speed * tick * self.desired[0] * self.direction)
         self.position[1] += (self.speed * tick * self.desired[1] * self.direction)
@@ -2023,9 +2049,10 @@ class Projectile(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = previous_center
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
 
         # pygame.draw.rect(canvas, RED,
         #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
@@ -2064,27 +2091,30 @@ class Cage(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.midtop = (x, y)
         
-    def update(self):
-        if self.new_state:
-            lefttop_position = self.rect.topleft
-            if self.is_open:
-                self.image = cage_opened_image
-            else:
-                self.image = cage_closed_image
+    def update(self, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.new_state:
+                lefttop_position = self.rect.topleft
+                if self.is_open:
+                    self.image = cage_opened_image
+                else:
+                    self.image = cage_closed_image
 
-            self.rect = self.image.get_rect()
-            self.rect.topleft = lefttop_position
+                self.rect = self.image.get_rect()
+                self.rect.topleft = lefttop_position
 
-    def draw(self, canvas, offset_x, offset_y):
-        if self.have_skull:
-            canvas.blit(skull_image, (round(self.rect.x -
-                                       offset_x), round(self.rect.bottom - skull_image.get_height()*1.1 - offset_y)))
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
+    def draw(self, canvas, offset_x, offset_y,screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.have_skull:
+                canvas.blit(skull_image, (round(self.rect.x -
+                                        offset_x), round(self.rect.bottom - skull_image.get_height()*1.1 - offset_y)))
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
 
-    def draw_back(self, canvas, offset_x, offset_y):
-        canvas.blit(cage_back_image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
+    def draw_back(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(cage_back_image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
 #Spike class
 class Spike(pygame.sprite.Sprite):
     def __init__(self, img, x, y):
@@ -2094,9 +2124,10 @@ class Spike(pygame.sprite.Sprite):
         self.rect.midtop = (x + TILE_SIZE // 2, y +
                             (TILE_SIZE - self.image.get_height()))
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
         # pygame.draw.rect(canvas, RED,
         #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
@@ -2126,9 +2157,8 @@ class Snake(pygame.sprite.Sprite):
         self.update_time = 0
         self.local_time = 0
 
-    def update(self,current_time, tick, world, all_platforms, player, item_boxes_group):
+    def update(self,current_time, tick, world, all_platforms, player, item_boxes_group, screen_rect):
         self.local_time = current_time
-        
         dx = 0
         dy = 0
         if self.active:
@@ -2136,7 +2166,7 @@ class Snake(pygame.sprite.Sprite):
             dy += self.vel_y
 
             if self.rect.colliderect(player.rect) and not player.invulnerability and \
-                 not player.reset_invulnerability and not player.in_death_animation:
+                not player.reset_invulnerability and not player.in_death_animation:
                 self.state = self.states['Attack']
                 sfx_dic['snake_hit'].play()
                 self.new_state = True
@@ -2161,13 +2191,14 @@ class Snake(pygame.sprite.Sprite):
             self.update_animation()
 
 
-    def draw(self, canvas, offset_x, offset_y):
-        if self.active:
-            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
-                                                                              offset_x), round(self.rect.y -
-                                                                                             offset_y)))
-            # pygame.draw.rect(canvas, RED,
-            #                 (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.active:
+                canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                                offset_x), round(self.rect.y -
+                                                                                                offset_y)))
+                # pygame.draw.rect(canvas, RED,
+                #                 (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 
     def update_animation(self):
@@ -2208,38 +2239,40 @@ class Checkpoint(pygame.sprite.Sprite):
         self.location = (x, y)
         self.active = True
 
-    def update(self, player):
-        if self.rect.colliderect(player.rect) and self.active:
-            player.checkpoint_position = vec(
-                self.rect.centerx, self.rect.y + TILE_SIZE - player.rect.height)
-            sfx_dic['checkpoint'].play()
-            for checkpoint in checkpoints_group:
-                if checkpoint.rect.x < self.rect.x:
-                    checkpoint.active = False
-                elif checkpoint == self:
-                    self.active = False
-                    break
+    def update(self, player, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            if self.rect.colliderect(player.rect) and self.active:
+                player.checkpoint_position = vec(
+                    self.rect.centerx, self.rect.y + TILE_SIZE - player.rect.height)
+                sfx_dic['checkpoint'].play()
+                for checkpoint in checkpoints_group:
+                    if checkpoint.rect.x < self.rect.x:
+                        checkpoint.active = False
+                    elif checkpoint == self:
+                        self.active = False
+                        break
 
-    def draw(self, canvas, offset_x, offset_y, level):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))
-        
-        is_lowest_id = True
-        for c in checkpoints_group:
-            if c != self and c.id < self.id:
-                is_lowest_id = False
-        
-        if is_lowest_id:
-            if level != 9 and level != 8:
-                draw_text('start', 45, WHITE, canvas, self.rect.centerx - offset_x, self.rect.y + self.rect.height/5 - offset_y, 'midtop', TILE_SIZE)
-            elif level == 8:
-                draw_text('Run!', 50 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-            elif level == 9:
-                draw_text('good luck', 40 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-        else:
-            draw_text('checkpoint', 40 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/4 - offset_y, 'midtop', TILE_SIZE)
-        # pygame.draw.rect(canvas, RED,
-        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+    def draw(self, canvas, offset_x, offset_y, level, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))
+            
+            is_lowest_id = True
+            for c in checkpoints_group:
+                if c != self and c.id < self.id:
+                    is_lowest_id = False
+            
+            if is_lowest_id:
+                if level != 9 and level != 8:
+                    draw_text('start', 45, WHITE, canvas, self.rect.centerx - offset_x, self.rect.y + self.rect.height/6 - offset_y, 'midtop', TILE_SIZE)
+                elif level == 8:
+                    draw_text('Run!', 50 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/6 - offset_y, 'midtop', TILE_SIZE)
+                elif level == 9:
+                    draw_text('good luck', 40 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/6 - offset_y, 'midtop', TILE_SIZE)
+            else:
+                draw_text('checkpoint', 40 , WHITE, canvas, self.rect.centerx -offset_x, self.rect.y + self.rect.height/6 - offset_y, 'midtop', TILE_SIZE)
+            # pygame.draw.rect(canvas, RED,
+            #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
     
     def update_animation(self):
         ANIMATION_COOLDOWN = 100
@@ -2268,11 +2301,12 @@ class Cloud(pygame.sprite.Sprite):
 
         self.location = (x, y)
 
-    def draw(self, canvas, offset_x, offset_y):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))                                                                            
-        # pygame.draw.rect(canvas, RED,
-        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+    def draw(self, canvas, offset_x, offset_y, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))                                                                            
+            # pygame.draw.rect(canvas, RED,
+            #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
 
 #Lever for items
 class Lever(pygame.sprite.Sprite):
@@ -2301,7 +2335,7 @@ class Lever(pygame.sprite.Sprite):
         self.activation_time = 0
         self.new_state = False
         
-    def update(self, current_time, snakes_group):
+    def update(self, current_time, snakes_group, screen_rect):
         if self.lever_type == 'green':
             if self.activated and current_time - self.activation_time > 5000:
                 self.new_state = True
@@ -2321,13 +2355,14 @@ class Lever(pygame.sprite.Sprite):
                 self.rect = self.image.get_rect()
                 self.rect.bottomright = location
             
-    def draw(self, canvas, offset_x, offset_y, level):
-        canvas.blit(self.image, (round(self.rect.x -
-                                       offset_x), round(self.rect.y - offset_y)))                                                                            
-        # pygame.draw.rect(canvas, RED,
-        #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
-        if level == 3 and self.activation_time == 0:
-            draw_text('Press "E"', 50, WHITE, canvas, self.rect.centerx - offset_x, self.rect.top - TILE_SIZE/2 - offset_y, 'midtop', TILE_SIZE)
+    def draw(self, canvas, offset_x, offset_y, level, screen_rect):
+        if self.rect.colliderect(screen_rect):
+            canvas.blit(self.image, (round(self.rect.x -
+                                        offset_x), round(self.rect.y - offset_y)))                                                                            
+            # pygame.draw.rect(canvas, RED,
+            #                  (round(self.rect.x - offset_x), round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)
+            if level == 3 and self.activation_time == 0:
+                draw_text('Press "E"', 50, WHITE, canvas, self.rect.centerx - offset_x, self.rect.top - TILE_SIZE/2 - offset_y, 'midtop', TILE_SIZE)
     #resets lever effect
     def reset_to_default(self):
         self.image = self.images_list[1]
@@ -2373,17 +2408,19 @@ def game():
     global BORDER_RIGHT
     global music_que
     global img_list
+    global is_fullscreen
+    global fullscreen_background
     level_complete = False
-    
-    if not music_handler.paused:
-        music_que = music_list[2:-1]
-        music_que = music_handler.music_que(music_que, music_list)
     
     # level
     if intro_scene:
         level = 0
     else:
         level = 1
+
+    if not music_handler.paused:
+        music_que = music_list[2:-1]
+        music_que = music_handler.music_que(music_que, music_list)
     
     pygame.event.set_allowed([KEYDOWN, KEYUP, MUSIC_END, QUIT])
     running = 1
@@ -2401,12 +2438,12 @@ def game():
 
     last_camera_coord = 0.0,0.0
 
-
+    fullscreen_background = pygame.transform.smoothscale(fullscreen_background, (SCREEN_WIDTH, SCREEN_HEIGHT))
     blue_fish_image = pygame.transform.smoothscale(blue_fish_image, (int(TILE_SIZE*1.4), int(TILE_SIZE*0.8)))
     cage_opened_image = pygame.transform.smoothscale(cage_opened_image, (TILE_SIZE*4, TILE_SIZE*5))
     bubble_image = pygame.transform.smoothscale(bubble_image, (TILE_SIZE*2, TILE_SIZE*2))
     skull_image = pygame.transform.smoothscale(skull_image, (TILE_SIZE*2, TILE_SIZE*2))
-    health_image = pygame.transform.smoothscale(health_image, (TILE_SIZE, TILE_SIZE))
+    health_image = pygame.transform.smoothscale(health_image, (int(TILE_SIZE*1.4), int(TILE_SIZE*1.4)))
     arrow_image = pygame.transform.smoothscale(arrow_image, (TILE_SIZE*2, TILE_SIZE))
 
     #transforming images to right size
@@ -2420,15 +2457,19 @@ def game():
     cage_back_image, cage_closed_image = return_images_from_list(cage_related_images)
     fake_platform_green, fake_ground_green = return_images_from_list(random_images)
     world, player, camera, all_platforms, invisible_blocks, \
-    level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
-        level, img_list)
+        level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(8, img_list)
 
+    screen_rect = screen.get_rect()
+    if is_fullscreen:
+        screen_rect.width = round(2*SCREEN_WIDTH)
+    else:
+        screen_rect.width = round(4*SCREEN_WIDTH)
+    
     # Main game loop.
     while running:
         time_per_frame = Clock.tick(FPS)
         tick = time_per_frame / 1000.0
         current_time += time_per_frame
-        canvas.fill(BLACK)
         if level_complete:
             world, player, camera, all_platforms, invisible_blocks,\
             level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(
@@ -2443,6 +2484,7 @@ def game():
             sfx_dic['death_screen'].play()
             world, player, camera, all_platforms, invisible_blocks, level, running \
                = game_over_menu(player,level, img_list)
+            pygame.mixer.stop()
             game_finished = False
             boss_fight = False
             start_fight = False
@@ -2522,6 +2564,9 @@ def game():
             else:
                 player.set_action(int(Animation_type.Idle))
         
+
+        screen_rect.centerx = player.rect.centerx
+        
         #camera update in levels
         if level == 8 and new_stage:
             wingman.cooldowns['shoot'] = 8000
@@ -2540,6 +2585,8 @@ def game():
                 pygame.mixer.music.load(f'platformer/data/sounds/music/boss_music.mp3')
                 if not music_handler.paused:
                     pygame.mixer.music.play(-1, 0.0, 2500)
+            elif stage == 0 and not start_fight:
+                wingman.speed = 0
         
             if boss_fight and new_stage and stage == 1:
                 camera = None
@@ -2560,29 +2607,28 @@ def game():
         #if player is alive update everything
         if player.alive:
             # Update methods
-            player.update(current_time, tick,  world, all_platforms, level)
+            player.update(current_time, tick,  world, all_platforms, level, screen_rect)
             cut_scene_manager.update(current_time, tick)
             for platform in all_platforms:
-                platform.update(world, tick)
+                platform.update(world, tick, screen_rect)
 
             for enemy in enemies_group:
-                enemy.update(current_time, tick, world, all_platforms,level)
+                enemy.update(current_time, tick, world, all_platforms,level,screen_rect)
                 if enemy.entity_id == 8:
                     enemy.ai(player, tick)
 
             if guard:
-                guard.update(current_time, tick, world, all_platforms,level)
+                guard.update(current_time, tick, world, all_platforms,level, screen_rect)
 
             if wingman:
                 #wingman behavior in level
                 if level == 8:
-                    # print(f'{camera.offset.x, player.rect.x + player.rect.width}??')
                     if player.rect.x + player.rect.width < camera.offset.x and not player.in_death_animation:
                         player.hurt(True, 'Border')
                         
                         camera.offset.x = 0
                         projectiles_group.empty()
-                    if player.rect.x + player.rect.width + 20*TILE_SIZE> world.get_world_length():
+                    if player.rect.x + player.rect.width + 20*TILE_SIZE> BORDER_RIGHT:
                         wingman.rect.x += wingman.speed*3 * tick
                     else:
                         wingman.rect.x = round(camera.offset.x) + SCREEN_WIDTH - wingman.rect.width
@@ -2593,12 +2639,6 @@ def game():
                             wingman.shoot('basic', 5*TILE_SIZE, Vector2(-1,0))
                 # wingman behavior in level
                 if level == 9:
-                    # boss fight stages
-                    if stage == 0 and new_stage:
-                        new_stage = False
-                        wingman.speed = 0
-                        
-
                     if stage == 1:
                         if new_stage:
                             new_stage = False
@@ -2639,9 +2679,9 @@ def game():
                                 wingman.diving = False
                                 wingman.stun_timer = 0
                                 dy = 0
-                                # if wingman.health_points <= 3:
-                                new_stage = True
-                                stage = 2
+                                if wingman.health_points <= 3:
+                                    new_stage = True
+                                    stage = 2
                             wingman.rect.y += dy
                     elif stage == 2:
                         if new_stage:
@@ -2715,7 +2755,7 @@ def game():
                                 dy = 0
                             wingman.rect.y += dy
                 
-                wingman.update(current_time, tick, world, all_platforms,level)
+                wingman.update(current_time, tick, world, all_platforms,level, screen_rect)
 
             #end boss fight
             elif boss_fight and stage == 3:
@@ -2742,7 +2782,7 @@ def game():
 
             # mystery box drop chances
             for box in item_boxes_group:
-                box.update(img_list)
+                box.update(img_list, screen_rect)
                 if box.destroy:
                     choice = random.random()
                     #spawn item
@@ -2767,10 +2807,11 @@ def game():
                     box.kill()
 
             for snake in snakes_group:
-                snake.update(current_time, tick, world, all_platforms, player, item_boxes_group)
+                if snake.rect.colliderect(screen_rect):
+                    snake.update(current_time, tick, world, all_platforms, player, item_boxes_group, screen_rect)
 
             for checkpoint in checkpoints_group:
-                checkpoint.update(player)
+                checkpoint.update(player, screen_rect)
                 if stage == 0 and level == 9:
                     if checkpoint.active == False or checkpoint.rect.x < player.rect.x:
                         start_fight = True
@@ -2786,24 +2827,24 @@ def game():
                             new_stage = True
 
             for lever in levers_group:
-                lever.update(current_time, snakes_group)
+                lever.update(current_time, snakes_group, screen_rect)
 
             for item in items_group:
-                item.update(player, current_time, tick, world, all_platforms, item_boxes_group)
+                item.update(player, current_time, tick, world, all_platforms, item_boxes_group, screen_rect)
 
             for cage in cages_group:
-                cage.update()
+                cage.update(screen_rect)
 
             if friend:
                 in_cage = simple_collision_check(friend, cages_group)
-                friend.update(current_time, tick, world, all_platforms,level)
+                friend.update(current_time, tick, world, all_platforms,level, screen_rect)
                 if level == 9 and friend.locked == True  and in_cage:
                     friend.rect.x = friend.x - friend.rect.width//2
                     friend.rect.bottom = friend.y - friend.rect.height*0.1
                     friend.flip = True
 
             for exit in exit_group:
-                exit.update(player)
+                exit.update(player, screen_rect)
 
             for block in invisible_blocks.copy():
                 if block.visible:
@@ -2833,96 +2874,100 @@ def game():
                 last_camera_coord = offset_x, offset_y 
             else:
                 offset_x, offset_y = last_camera_coord
-
+            canvas.fill(BLACK)
             # Draw methods
-            draw_background(canvas, offset_x, offset_y, background_images)
-            world.draw(canvas, offset_x, offset_y, player)
+            draw_background(canvas, offset_x, offset_y, background_images, is_fullscreen, screen_rect)
+            world.draw(canvas, offset_x, offset_y, player, screen_rect)
 
             for decoration in decoration_group:
                 if decoration.type != 'fence':
-                    decoration.draw(canvas, offset_x, offset_y)
+                    decoration.draw(canvas, offset_x, offset_y, screen_rect)
 
             for platform in all_platforms:
-                platform.draw(canvas, offset_x, offset_y)
+                platform.draw(canvas, offset_x, offset_y, screen_rect)
             
             for spike in spikes_group:
-                spike.draw(canvas, offset_x, offset_y)
+                spike.draw(canvas, offset_x, offset_y, screen_rect)
 
             for checkpoint in checkpoints_group:
-                checkpoint.draw(canvas, offset_x, offset_y, level)
+                checkpoint.draw(canvas, offset_x, offset_y, level, screen_rect)
 
             for box in item_boxes_group:
-                box.draw(canvas, offset_x, offset_y)
+                box.draw(canvas, offset_x, offset_y, screen_rect)
 
             for block in invisible_blocks:
-                block.draw(canvas, offset_x, offset_y)
+                block.draw(canvas, offset_x, offset_y, screen_rect)
 
             for enemy in enemies_group:
-                enemy.draw(canvas, offset_x, offset_y)
+                enemy.draw(canvas, offset_x, offset_y, screen_rect)
 
             for exit in exit_group:
-                exit.draw(canvas, offset_x, offset_y)
+                exit.draw(canvas, offset_x, offset_y, screen_rect)
 
             for cage in cages_group:
-                cage.draw_back(canvas, offset_x, offset_y)
+                cage.draw_back(canvas, offset_x, offset_y, screen_rect)
             
-            for projectile in projectiles_group:
-                projectile.draw(canvas, offset_x, offset_y)
+            
 
             if friend:
                 if level == 9 and friend.locked:
                     for friend in friend_group:
-                        friend.draw(canvas, offset_x, offset_y)
+                        friend.draw(canvas, offset_x, offset_y, screen_rect)
                     for cage in cages_group:
-                        cage.draw(canvas, offset_x, offset_y)
+                        cage.draw(canvas, offset_x, offset_y, screen_rect)
 
                 elif friend.locked == False:
                     for cage in cages_group:
-                        cage.draw(canvas, offset_x, offset_y)
+                        cage.draw(canvas, offset_x, offset_y, screen_rect)
                     for friend in friend_group:
-                        friend.draw(canvas, offset_x, offset_y)
+                        friend.draw(canvas, offset_x, offset_y, screen_rect)
             else:
                 for cage in cages_group:
-                        cage.draw(canvas, offset_x, offset_y)
-
-            if wingman:
-                wingman.draw(canvas, offset_x, offset_y)
+                    cage.draw(canvas, offset_x, offset_y, screen_rect)
 
             for water in water_group:
-                collision = water.collide_water(player, level)
+                collision = water.collide_water(player, level, screen_rect)
                 if collision:
                     camera.offset.x = 0
                     projectiles_group.empty()
-                        
-                water.draw(canvas, offset_x, offset_y)
+                            
+                water.draw(canvas, offset_x, offset_y, screen_rect)
 
             for fish in fish_group:
                 fish.collect(player)
-                fish.draw(canvas, offset_x, offset_y)
+                fish.draw(canvas, offset_x, offset_y, screen_rect)
             
             for snake in snakes_group:
-                snake.draw(canvas,offset_x, offset_y)
+                snake.draw(canvas,offset_x, offset_y, screen_rect)
 
             for lever in levers_group:
-                lever.draw(canvas,offset_x, offset_y,level)
+                lever.draw(canvas,offset_x, offset_y,level, screen_rect)
 
             for item in items_group:
-                item.draw(canvas, offset_x, offset_y)
-            
+                item.draw(canvas, offset_x, offset_y, screen_rect)
+        
             for cloud in clouds_group:
-                cloud.draw(canvas, offset_x, offset_y)
-            
+                cloud.draw(canvas, offset_x, offset_y, screen_rect)
+        
             if guard:
-                guard.draw(canvas, offset_x, offset_y)
+                guard.draw(canvas, offset_x, offset_y, screen_rect)
 
-            player.draw(canvas, offset_x, offset_y)
-            if level != 9 and level != 8:
-                player.draw_fish(canvas)
-            player.draw_health(canvas)
+            if wingman:
+                wingman.draw(canvas, offset_x, offset_y, screen_rect)
+
+            player.draw(canvas, offset_x, offset_y, screen_rect)
 
             for decoration in decoration_group:
                 if decoration.type == 'fence':
-                    decoration.draw(canvas, offset_x, offset_y)
+                    decoration.draw(canvas, offset_x, offset_y, screen_rect)
+            
+            for projectile in projectiles_group:
+                projectile.draw(canvas, offset_x, offset_y, screen_rect)
+
+            if level != 9 and level != 8:
+                player.draw_fish(canvas)
+            player.draw_health(canvas)
+            
         #cinematics
         if intro_scene:
             if level == 1:
@@ -2947,7 +2992,6 @@ def game():
         #finish game and return to menu
         if game_finished and not player.alive:
             running = False
-        draw_text(str(Clock.get_fps()), 50, RED , canvas, SCREEN_WIDTH//2, SCREEN_HEIGHT*0.1, 'midtop', TILE_SIZE)
         cut_scene_manager.draw()    
         if running:
             screen.blit(canvas, (0, 0))
@@ -3001,7 +3045,7 @@ def game_over_menu(player, level, img_list):
                     if button.button_id == 0:
                         world, player, camera, all_platforms, invisible_blocks, \
                         level, cut_scene_manager, BORDER_LEFT, BORDER_RIGHT = load_level(
-                            1, img_list)
+                           1, img_list)
                         if not music_handler.paused:
                             music_que = music_handler.music_que([], music_list)
                         
@@ -3028,8 +3072,8 @@ def main_menu():
     global new_resolution
     pygame.mixer.music.load(f'platformer/data/sounds/music/main_menu_music.mp3')
     pygame.mixer.music.play(-1, 0.0, 2500)
-    texts = ['Start', 'Settings', 'Credits', 'Quit']
-    number_of_buttons = 4
+    texts = ['Start', 'Settings', 'Quit']
+    number_of_buttons = 3
     buttons = []
     icons = [interface_images['play'], interface_images['settings'], interface_images['profile'], interface_images['cancel']]
     icons = transform_images(icons, int(1.5*TILE_SIZE), int(1.5*TILE_SIZE), True)
@@ -3055,6 +3099,7 @@ def main_menu():
     last_update = 0
     current_time = 0
     helper = 0,0
+    screen_rect = screen.get_rect()
     while running:
         time_per_frame = Clock.tick(FPS)
         tick = time_per_frame / 1000.0
@@ -3100,8 +3145,8 @@ def main_menu():
         player.image = player.animation_list[anim_frame]
         friend.image = friend.animation_list[anim_frame]
 
-        player.draw(canvas, 0, 0)
-        friend.draw(canvas, 0, 0)
+        player.draw(canvas, 0, 0, screen_rect)
+        friend.draw(canvas, 0, 0, screen_rect)
 
         for button in buttons:
             if button.draw(canvas, TILE_SIZE):
@@ -3110,16 +3155,15 @@ def main_menu():
                     if button.button_id == 0:
                         clickable = False
                         game()
-                        pygame.mixer.stop()
                         pygame.mixer.music.load(f'platformer/data/sounds/music/main_menu_music.mp3')
                         pygame.mixer.music.play(-1, 0.0, 2500)
                     elif button.button_id == 1:
                         clickable = False
                         settings()
+                    # elif button.button_id == 2:
+                    #     clickable = False
+                    #     show_credits()
                     elif button.button_id == 2:
-                        clickable = False
-                        show_credits()
-                    elif button.button_id == 3:
                         pygame.quit()
                         sys.exit()
 
@@ -3127,11 +3171,12 @@ def main_menu():
         draw_text('journey', 120, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.925, 'left', TILE_SIZE)
         clickable = True
         screen.blit(canvas, (0, 0))
-        pygame.display.update()
+        pygame.display.flip()
 
 def ingame_menu():
     global menu_background_image
     global interface_images
+    global music_que
     texts = ['Resume', 'Audio', 'Controls', 'Menu']
     number_of_buttons = 4
     back_button_image = interface_images['back']
@@ -3155,6 +3200,9 @@ def ingame_menu():
     while running:
         canvas.blit(menu_background_image, (0,0))
         for event in pygame.event.get():
+            if event.type == MUSIC_END:
+                if not music_handler.paused:
+                    music_que = music_handler.music_que(music_que, music_list)
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
@@ -3226,7 +3274,7 @@ def show_credits():
             draw_text(i, 45, WHITE, canvas, plate_rect.centerx - TILE_SIZE*2, TILE_SIZE//2 + plate_rect.y + index*((plate_rect.bottom - plate_rect.y)//len(credits)), 'midtop', TILE_SIZE)
 
         draw_text('Credits', 150, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.85, 'left', TILE_SIZE)
-
+        
         screen.blit(canvas, (0, 0))
         pygame.display.update()
 
@@ -3319,7 +3367,6 @@ def controls():
     back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
     back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
     back_button.rect.left = SCREEN_WIDTH*0.05
-    print(len(texts))
     plate = pygame.Surface((SCREEN_WIDTH*0.45, SCREEN_HEIGHT*(0.1*len(texts))))
     plate.set_alpha(100)
     plate_rect = plate.get_rect()
@@ -3485,6 +3532,7 @@ def resolutions():
     global menu_background_image
     global new_resolution
     global interface_images
+    global is_fullscreen
     back_button_image = interface_images['back']
     back_button_image = pygame.transform.smoothscale(back_button_image,(TILE_SIZE,TILE_SIZE))
     back_button = Button(SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.915, 'back', 'back', back_button_image, 0)
@@ -3529,17 +3577,20 @@ def resolutions():
                         SCREEN_WIDTH, SCREEN_HEIGHT = 800, 640
                         screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
                         canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+                        is_fullscreen = False
                     elif button.button_id == 1:
                         SCREEN_WIDTH, SCREEN_HEIGHT = 1024,768
                         screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
                         canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+                        is_fullscreen = False
                     elif button.button_id == 2:
                         SCREEN_WIDTH, SCREEN_HEIGHT = monitor_size
                         screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
                         canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+                        is_fullscreen = True
                     TILE_SIZE = round(SCREEN_HEIGHT / ROWS)
-                    GRAVITY = round(SCREEN_HEIGHT / 12)
-                    GRAVITY_FORCE_LIMIT = round(SCREEN_HEIGHT / 40)
+                    GRAVITY = round(TILE_SIZE*1.25)
+                    GRAVITY_FORCE_LIMIT = round(TILE_SIZE/2.6)
                     animations_list = load_entity_animations()
                     menu_background_image = pygame.transform.smoothscale(menu_background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
@@ -3572,5 +3623,5 @@ def resolutions():
 
 #start game
 
-main_menu()
 # cProfile.run('game()')
+main_menu()

@@ -68,7 +68,10 @@ class Animation_type(IntEnum):
 monitor_size = [pygame.display.Info().current_w,pygame.display.Info().current_h]
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-
+pygame.display.set_caption('Cat-hletic journey')
+icon = pygame.image.load(
+    f'platformer/data/images/other/player_head.png').convert_alpha()
+pygame.display.set_icon(icon)
 #cursor
 pygame.mouse.set_cursor(*pygame.cursors.tri_left)
 

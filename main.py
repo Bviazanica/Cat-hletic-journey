@@ -85,7 +85,7 @@ blue_fish_image = pygame.image.load(
     f'platformer/data/images/entities/Fish/Idle/0.png').convert_alpha()
 
 dead_fish = load_images('entities/Dead_fish')
-background_images = load_images('backgrounds/d')
+background_images = load_images('backgrounds/background')
 interface_images = load_images_to_dic('interface')
 arrow_image = interface_images['arrow']
 button_long = interface_images['long']
@@ -900,7 +900,6 @@ def draw_background(canvas, offset_x, offset_y, background_images, fullscreen, s
                 if parallax_variable > 0.20:
                     parallax_variable = 0.2
                 canvas.blit(image, (x*SCREEN_WIDTH - round(offset_x*parallax_variable), 0))
-                    # pygame.draw.rect(canvas, RED, (bg_rect.x - round(offset_x*parallax_variable), 0, bg_rect.width, bg_rect.height), 10)
                 parallax_variable += 0.05
 
 
@@ -1258,7 +1257,7 @@ class Entity(pygame.sprite.Sprite):
         self.local_time = 0
         self.air_timer = 0
 
-        self.fish = 33
+        self.fish = 0
         self.checkpoint_position = vec(0, 0)
 
         self.invulnerability = False
@@ -1310,8 +1309,6 @@ class Entity(pygame.sprite.Sprite):
         if self.rect.x > world.get_world_length() or self.rect.x + self.rect.width < 0 or \
                         self.rect.y + self.rect.height < 0 or self.rect.y > SCREEN_HEIGHT and self.entity_id != 3:
             self.hurt(True, 'out of bounds')
-            
-        print(self.entity_id, self.rect.x, self.alive, self.vel_y)
         if self.rect.colliderect(screen_rect) or self.entity_id == 3:
             # invulnerability when respawning
             if self.in_death_animation == False:
@@ -1663,28 +1660,28 @@ class Entity(pygame.sprite.Sprite):
     
     #draw entities
     def draw(self, canvas, offset_x, offset_y, screen_rect):
-        if self.rect.colliderect(screen_rect):
-            if self.entity_id == 0 or self.entity_id == 6:
-                #change alpha while invulnerable after reset
-                if self.reset_invulnerability and self.entity_id == 0:
-                    self.image.set_alpha(100)
-                else:
-                    self.image.set_alpha(255)
-                    
-                canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
-                                                                                    offset_x - TILE_SIZE//2), 2 + round(self.rect.y -
-                                                                                                        offset_y - TILE_SIZE//4)))                                                                             
+        # if self.rect.colliderect(screen_rect):
+        if self.entity_id == 0 or self.entity_id == 6:
+            #change alpha while invulnerable after reset
+            if self.reset_invulnerability and self.entity_id == 0:
+                self.image.set_alpha(100)
             else:
-                canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
-                                                                                    offset_x), round(self.rect.y - offset_y)))  
-            # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
-            #                                            round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                                                                                                      
-            # bubble rect on player                                                                                
-            if self.entity_id == 0:
-                bubble_rect = bubble_image.get_rect()
-                bubble_rect.center = self.rect.center
-                if self.invulnerability:
-                    canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
+                self.image.set_alpha(255)
+                
+            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                                offset_x - TILE_SIZE//2), 2 + round(self.rect.y -
+                                                                                                    offset_y - TILE_SIZE//4)))                                                                             
+        else:
+            canvas.blit(pygame.transform.flip(self.image, self.flip, False), (round(self.rect.x -
+                                                                                offset_x), round(self.rect.y - offset_y)))  
+        # pygame.draw.rect(canvas, RED, (round(self.rect.x - offset_x),
+        #                                             round(self.rect.y - offset_y), self.rect.width, self.rect.height), 2)                                                                                                                                                                      
+        # bubble rect on player                                                                                
+        if self.entity_id == 0:
+            bubble_rect = bubble_image.get_rect()
+            bubble_rect.center = self.rect.center
+            if self.invulnerability:
+                canvas.blit(bubble_image, (bubble_rect.x - offset_x,bubble_rect.y - offset_y))
 
     #draw amount of fish player collected
     def draw_fish(self, canvas):
@@ -2210,9 +2207,11 @@ class Snake(pygame.sprite.Sprite):
         if self.frame_index >= len(self.animation_list[self.action]):
             if self.action == int(Animation_type.Disappear):
                 self.active = False
+                self.frame_index = 0
             elif self.action == int(Animation_type.Appear):
                 self.state = self.states['Idle']
                 self.new_state = True
+                self.frame_index = 0
             elif self.action == int(Animation_type.Attack):
                 self.new_state = True
                 self.state = self.states['Idle']
@@ -2457,13 +2456,13 @@ def game():
     cage_back_image, cage_closed_image = return_images_from_list(cage_related_images)
     fake_platform_green, fake_ground_green = return_images_from_list(random_images)
     world, player, camera, all_platforms, invisible_blocks, \
-        level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(8, img_list)
+        level,cut_scene_manager,BORDER_LEFT, BORDER_RIGHT = load_level(level, img_list)
 
     screen_rect = screen.get_rect()
     if is_fullscreen:
         screen_rect.width = round(2*SCREEN_WIDTH)
     else:
-        screen_rect.width = round(4*SCREEN_WIDTH)
+        screen_rect.width = round(3*SCREEN_WIDTH)
     
     # Main game loop.
     while running:
@@ -2992,8 +2991,10 @@ def game():
         #finish game and return to menu
         if game_finished and not player.alive:
             running = False
-        cut_scene_manager.draw()    
+        cut_scene_manager.draw()
+        # pygame.draw.rect(canvas, RED, screen_rect, 5)
         if running:
+            # draw_text(str(int(Clock.get_fps())), 50, RED, canvas, SCREEN_WIDTH//2, SCREEN_HEIGHT * 0.1, 'midtop', TILE_SIZE)
             screen.blit(canvas, (0, 0))
             pygame.display.flip()
         
@@ -3094,7 +3095,6 @@ def main_menu():
 
     player.animation_list = transform_images(player.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
     friend.animation_list = transform_images(friend.animation_list, int(2.5*TILE_SIZE), 4*TILE_SIZE, True)
-    # friend.flip = True
     anim_frame = 0
     last_update = 0
     current_time = 0
@@ -3122,7 +3122,7 @@ def main_menu():
                     button.rect = button.image.get_rect()
                     button.rect.centerx = helper[0]
                     button.rect.centery = helper[1]
-                
+            screen_rect = screen.get_rect()
             new_resolution = False
 
         for event in pygame.event.get():
@@ -3171,7 +3171,7 @@ def main_menu():
         draw_text('journey', 120, WHITE, canvas, SCREEN_WIDTH*0.05, SCREEN_HEIGHT*0.925, 'left', TILE_SIZE)
         clickable = True
         screen.blit(canvas, (0, 0))
-        pygame.display.flip()
+        pygame.display.update()
 
 def ingame_menu():
     global menu_background_image

@@ -15,6 +15,7 @@ def load_fake_platform_tiles(width, height, surface, TILE_SIZE, ground_image, pl
                 surface.blit(ground_image, (y*TILE_SIZE, x*TILE_SIZE))
     return surface
 
+
 def load_fonts_to_dic():
     dict = {}
     for i in range(500):

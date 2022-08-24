@@ -214,8 +214,11 @@ class Tutorial:
         self.current_time = time_passed
         pressed = pygame.key.get_pressed()
         self.player.set_action(int(Animation_type.Idle))
-        self.skip = False
-        if self.skip == 0:
+        if self.skip and self.current_time - self.started_time > 1000:
+            sfx_dic['skip'].play()
+            self.cut_scene_running = False
+            self.player.locked = False
+        else:
             self.skip = pressed[pygame.K_RETURN]
         if self.skip and self.current_time - self.started_time > 1000:
             sfx_dic['skip'].play()

@@ -5,15 +5,17 @@ E-mail: bviazanica@gmail.com
 
 About:
 This is one of two games for my master's thesis. Game is 2d platformer with Super mario elements.
-It's about saving a friend who got abducted by and evil enemy.
+It's about saving a friend who got abducted by an evil enemy.
 
-Credits
+<---- Credits ---->
 
-Font: 'Caramel sweets' by Kurnia Setyadi, obtained from https://www.dafont.com/.
+Font: 
+		- 'Caramel sweets' by Kurnia Setyadi, obtained from https://www.dafont.com/.
 
-Music: All music and sound effects used in the game was obtained from https://www.zapsplat.com/.
-	   With exceptions for interface sounds provided by Kenney, obtained from https://www.kenney.nl
-	   and outro song 'Happy tune' by Syncopika, obtained from https://opengameart.org/.
+Music & Sounds: 
+		- All music and sound effects used in the game was obtained from https://www.zapsplat.com/.
+		- With exceptions for interface sounds provided by Kenney, obtained from https://www.kenney.nl
+	    and outro song 'Happy tune' by Syncopika, obtained from https://opengameart.org/.
 	   
 Graphics:
 		- Menu background: 'Fantasy cartoon game backgrounds' obtained from https://craftpix.net/.
